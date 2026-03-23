@@ -150,7 +150,6 @@ class RetrievalEngine:
 
         # Stage 1a: BM25 — raw query, clean corpus (exact token matching)
         bm25_scores = self.bm25.get_scores(tokenize(query))
-        bm25_top_indices = set(np.argsort(-bm25_scores)[:BM25_TOP_K])
 
         # Stage 1b: Dense — ontology-expanded query against expanded corpus
         dq = dense_query if dense_query is not None else query
@@ -164,22 +163,15 @@ class RetrievalEngine:
         else:
             dense_scores = np.zeros(n)
 
-        dense_top_indices = set(np.argsort(-dense_scores)[:DENSE_TOP_K])
-
-        # Stage 2: RRF fusion ONLY on the union of both top-K sets
-        # This is the key: we don't rank all N docs, only the ~100 candidates
-        # that at least one retriever thought were relevant
-        candidate_pool = bm25_top_indices | dense_top_indices
-        candidate_list = sorted(candidate_pool)
-
-        # Compute ranks within each retriever's full ordering
+        # Stage 2: RRF fusion over ALL docs (rank-wise full coverage)
+        # Every doc gets a rank-derived score; no one gets NO_CE_LOGIT
         bm25_rank_order = np.argsort(-bm25_scores)
         dense_rank_order = np.argsort(-dense_scores)
         bm25_rank_map = {int(idx): rank + 1 for rank, idx in enumerate(bm25_rank_order)}
         dense_rank_map = {int(idx): rank + 1 for rank, idx in enumerate(dense_rank_order)}
 
         rrf_results = []
-        for idx in candidate_list:
+        for idx in range(n):
             bm25_rank = bm25_rank_map.get(idx, n)
             dense_rank = dense_rank_map.get(idx, n)
             rrf_score = (1.0 / (RRF_K + bm25_rank)) + (1.0 / (RRF_K + dense_rank))
@@ -202,7 +194,6 @@ class RetrievalEngine:
             # Sort by CE raw score descending → rank 1 = best, rank n = worst
             ce_rank_order = np.argsort(-np.array(ce_raw_scores))
             # Rank-based score: rank 1 → 1.0, rank 2 → (n-1)/n, ..., rank n → 1/n
-            # Stored as "logit" so scorer's sigmoid gives the same value (backward compat)
             n_ce_docs = len(ce_indices)
             rank_scores = np.zeros(n_ce_docs)
             for pos, orig_idx in enumerate(ce_rank_order):
@@ -227,35 +218,22 @@ class RetrievalEngine:
             self.last_ce_logits = {}
             self.last_ce_scores = {}
             results = []
+            n_ce = 0
 
-        # Bottom 50% in RRF pool: fractional score by RRF rank (below worst CE doc)
-        # Range: just under 1/n_ce down to ~0, so they always rank below CE-scored docs
-        n_bottom = rrf_pool_size - n_ce
+        # All remaining docs: RRF rank-derived score (connect rankwise fully, no -10)
+        # Positions n_ce..rrf_pool_size: fractional score below worst CE doc
+        # Positions rrf_pool_size..n: continue rank decay so lowest RRF rank gets smallest score
         worst_ce = 1.0 / n_ce if n_ce > 0 else 0.5
-        for pos, (idx, _) in enumerate(rrf_results[n_ce:rrf_pool_size]):
+        n_after_ce = len(rrf_results) - n_ce
+        for pos, (idx, _) in enumerate(rrf_results[n_ce:]):
             doc_id = self.doc_ids[idx]
-            frac_score = worst_ce * (1.0 - pos / max(n_bottom, 1)) * 0.95
+            # Linear decay: rank 0 (pos 0) = just below worst CE, rank n_after_ce-1 = ~0.01
+            frac_score = worst_ce * (1.0 - pos / max(n_after_ce, 1)) * 0.95
             frac_score = max(0.01, min(worst_ce - 0.01, frac_score))
             frac_logit = np.log(frac_score / (1.0 - frac_score))
             results.append((doc_id, float(frac_score)))
             self.last_ce_logits[doc_id] = float(frac_logit)
             self.last_ce_scores[doc_id] = float(frac_score)
-
-        # RRF overflow (beyond top-K)
-        for idx, _ in rrf_results[rrf_pool_size:]:
-            doc_id = self.doc_ids[idx]
-            results.append((doc_id, 0.0))
-            self.last_ce_logits[doc_id] = NO_CE_LOGIT
-            self.last_ce_scores[doc_id] = 0.0
-
-        # Docs outside RRF pool: score 0, NO_CE_LOGIT (never saw CE)
-        seen = set(idx for idx, _ in rrf_results)
-        for i in range(n):
-            if i not in seen:
-                doc_id = self.doc_ids[i]
-                results.append((doc_id, 0.0))
-                self.last_ce_logits[doc_id] = NO_CE_LOGIT
-                self.last_ce_scores[doc_id] = 0.0
 
         results.sort(key=lambda x: x[1], reverse=True)
         return results

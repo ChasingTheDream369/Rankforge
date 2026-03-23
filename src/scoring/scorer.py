@@ -11,6 +11,7 @@ from typing import Optional
 
 from src.config import (
     LLM_PROVIDER, D1_LLM_FALLBACK, D2_AGENT_ENABLED, D3_LLM_FALLBACK,
+    CE_WEIGHT,
 )
 from src.contracts import SkillEvidence
 
@@ -37,8 +38,6 @@ W_SKILLS = 0.40
 W_SENIORITY = 0.35
 W_DOMAIN = 0.15
 W_CONSTRAINTS = 0.10
-MAX_CE_WEIGHT = 0.25
-CE_RAMP_N = 5
 
 # Stage 2 prompts
 _SCORING_SYSTEM = (
@@ -128,10 +127,9 @@ def is_resume(text: str) -> bool:
         return True
 
 
-def compute_ce_weight(n_candidates: int) -> float:
-    if n_candidates <= 1:
-        return 0.0
-    return min(MAX_CE_WEIGHT, MAX_CE_WEIGHT * (n_candidates - 1) / CE_RAMP_N)
+def compute_ce_weight(n_candidates: int = 1) -> float:
+    """Fixed CE weight. All candidates get normalized CE score; blend is always (1-α)*dim + α*sigmoid(ce_logit)."""
+    return CE_WEIGHT
 
 
 def score_resume(
@@ -214,7 +212,7 @@ def score_resume(
         print(f"      D1={d1:.2f} D2={d2:.2f} D3={d3:.2f} D4={d4:.2f} | dim={dim:.3f} | final={final:.4f} [{mode}]")
 
     conf = result.get("confidence", "MEDIUM")
-    if n_candidates > CE_RAMP_N and ce_sig > 0:
+    if ce_sig > 0:
         div = abs(dim - ce_sig)
         if div > 0.50:
             conf = "LOW"

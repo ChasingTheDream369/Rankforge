@@ -34,12 +34,18 @@ BM25_TOP_K = 50
 DENSE_TOP_K = 50
 RRF_K = 60
 RRF_TOP_K = 50          # top 50 from RRF form candidate pool before CE
-CE_TOP_PERCENT = 0.50   # top 50% through CE; bottom 50% get fractional score by RRF rank
+# Top % of RRF pool that goes through real CE. Env: CE_TOP_PERCENT (0-100, default 50)
+try:
+    _ce_top = os.environ.get("CE_TOP_PERCENT")
+    CE_TOP_PERCENT = max(0.0, min(1.0, float(_ce_top) / 100.0)) if _ce_top is not None else 0.50
+except (TypeError, ValueError):
+    CE_TOP_PERCENT = 0.50
 MAX_RESUMES_PER_RUN = 50
 
 # Scoring
 CRITICAL_SKILL_PENALTY = 0.85
 CRITICAL_IMPORTANCE_THRESHOLD = 0.8  # importance >= 4 out of 5
+CE_WEIGHT = 0.25  # (1-CE_WEIGHT)*dim + CE_WEIGHT*sigmoid(ce_logit)
 
 # Paths
 JD_DIR = "data/job_descriptions"
