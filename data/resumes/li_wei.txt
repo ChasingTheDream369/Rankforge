@@ -1,0 +1,35 @@
+Li Wei
+
+SUMMARY
+Platform Engineer with 6 years of experience building internal developer platforms and tooling. Expertise in Kubernetes orchestration, CI/CD automation, and cloud-native infrastructure at scale.
+
+EXPERIENCE
+
+Senior Platform Engineer | CloudPay Inc. | 2022–2024
+- Designed and operated Kubernetes clusters on AWS EKS serving 200+ microservices for a payments platform
+- Built internal developer portal with self-service provisioning of PostgreSQL, Redis, and Kafka clusters
+- Automated infrastructure with Terraform modules and Python-based CLI tools
+- Managed Docker container registry and image scanning pipeline
+- Configured SQS-based event routing between payment microservices
+
+Platform Engineer | FinEdge | 2020–2022
+- Maintained AWS infrastructure (ECS, Lambda, S3, DynamoDB) for fintech product
+- Built CI/CD pipelines using GitHub Actions and ArgoCD
+- Implemented centralized logging with ELK stack and distributed tracing with Jaeger
+- Wrote Python scripts for database migration and data backfill operations
+
+Junior DevOps Engineer | TechBase | 2018–2020
+- Managed Jenkins pipelines for 15+ Java and Go microservices
+- Containerized legacy applications using Docker
+- Monitored production systems with Prometheus and Grafana
+
+SKILLS
+Kubernetes, AWS (EKS, ECS, Lambda, S3, SQS, DynamoDB), Docker, Terraform, Python (scripting/automation), Go (basic), PostgreSQL (operations), Redis (operations), Kafka (cluster management), CI/CD, GitHub Actions, ArgoCD, Prometheus, Grafana, Linux
+
+CERTIFICATIONS
+Certified Kubernetes Administrator (CKA)
+AWS Solutions Architect – Associate
+HashiCorp Terraform Associate
+
+EDUCATION
+BSc Computer Science, National University of Singapore, 2018

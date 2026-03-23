@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Test Suite — Resume Matcher{% endblock %}
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+    <div>
+        <h1 class="text-text-dark text-2xl font-semibold">Test Suite</h1>
+        <p class="text-text-disabled text-sm mt-0.5">Unit + integration tests for the matching engine</p>
+    </div>
+    <button id="run-tests-btn"
+        class="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-main text-white text-sm font-medium hover:bg-primary-dark transition-colors">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        Run All Tests
+    </button>
+</div>
+
+<!-- Status bar -->
+<div id="test-status-bar" class="hidden mb-6 bg-background-paper border border-divider-light rounded-xl px-5 py-4">
+    <div class="flex items-center gap-3">
+        <svg id="status-spinner" class="hidden animate-spin w-4 h-4 text-primary-main" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+        </svg>
+        <span id="status-label" class="text-sm font-medium text-text-dark"></span>
+        <div id="summary-pills" class="hidden flex items-center gap-2 ml-4">
+            <span id="pill-passed"  class="text-xs px-2 py-0.5 rounded-full bg-success-main text-white font-medium"></span>
+            <span id="pill-failed"  class="text-xs px-2 py-0.5 rounded-full bg-error-main   text-white font-medium hidden"></span>
+            <span id="pill-skipped" class="text-xs px-2 py-0.5 rounded-full bg-background-contrast text-text-disabled font-medium hidden"></span>
+        </div>
+    </div>
+</div>
+
+<!-- Results by class -->
+<div id="results-container" class="flex flex-col gap-4"></div>
+
+<!-- Raw log (collapsed) -->
+<div id="raw-log-section" class="hidden mt-6">
+    <button id="toggle-raw" class="text-xs text-text-disabled hover:text-text-body transition-colors mb-2 flex items-center gap-1 select-none">
+        <svg id="toggle-raw-icon" class="w-3 h-3 flex-shrink-0 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+        </svg>
+        <span id="toggle-raw-label">Show raw output</span>
+    </button>
+    <pre id="raw-log" class="hidden text-xs font-mono text-text-disabled bg-background-dust border border-divider-light rounded-xl p-4 overflow-x-auto max-h-80 overflow-y-auto leading-relaxed"></pre>
+</div>
+{% endblock %}
+{% block scripts %}
+<script type="module" src="{% static 'js/pages/test_suite.js' %}"></script>
+{% endblock %}

@@ -1,0 +1,277 @@
+{% extends 'base.html' %}
+{% load static matcher_tags %}
+{% block title %}{{ result.resume.name }} — Resume Matcher{% endblock %}
+{% block content %}
+<!-- Header -->
+<div class="flex items-start justify-between mb-8">
+    <div>
+        <div class="mb-2">
+            <a href="{% url 'run_detail' result.match_run.id %}" class="text-text-disabled hover:text-text-body text-sm transition-colors">← {{ result.match_run.job.title }}</a>
+        </div>
+        <div class="flex items-center gap-4">
+            <div>
+                <h1 class="text-text-dark text-2xl font-semibold">{{ result.resume.name }}</h1>
+                <p class="text-text-disabled text-sm mt-0.5">Rank #{{ result.rank }} · {{ result.recommendation|rec_label }} · {{ result.scoring_mode }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="text-right flex flex-col items-end gap-3">
+        <div class="text-4xl font-bold {% if result.final_score >= 0.7 %}text-success-main{% elif result.final_score >= 0.4 %}text-warning-main{% else %}text-error-main{% endif %}">
+            {{ result.final_score|floatformat:2 }}
+        </div>
+        <span class="text-xs px-2.5 py-1 rounded-full text-white font-medium
+            {% if result.confidence == 'HIGH' %}bg-success-main{% elif result.confidence == 'MEDIUM' %}bg-warning-main{% else %}bg-error-main{% endif %}">
+            {{ result.confidence }} confidence
+        </span>
+        <div class="flex gap-2 mt-1">
+            <button class="preview-btn text-xs px-3 py-1.5 rounded-lg border border-divider-light text-text-body hover:bg-hover transition-colors"
+                data-resume-id="{{ result.resume.id }}" data-resume-name="{{ result.resume.name }}">
+                Preview Resume
+            </button>
+            <button id="rescore-single-btn"
+                data-result-id="{{ result.id }}"
+                class="text-xs px-3 py-1.5 rounded-lg border border-divider-light text-text-body hover:bg-hover transition-colors">
+                Re-score
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- 4 Dimension cards -->
+<div class="grid grid-cols-2 gap-4 mb-8">
+    {% with score=result.d1_skills label="D1 — Hard Skills" weight="40%" %}{% include 'components/dimension_card.html' %}{% endwith %}
+    {% with score=result.d2_seniority label="D2 — Experience Depth" weight="35%" %}{% include 'components/dimension_card.html' %}{% endwith %}
+    {% with score=result.d3_domain label="D3 — Domain Fit" weight="15%" %}{% include 'components/dimension_card.html' %}{% endwith %}
+    {% with score=result.d4_constraints label="D4 — Constraints" weight="10%" %}{% include 'components/dimension_card.html' %}{% endwith %}
+</div>
+
+<!-- Score breakdown summary -->
+<div class="bg-background-paper border border-divider-light rounded-xl p-6 mb-6">
+    <h2 class="text-text-dark font-medium mb-4">Score Breakdown</h2>
+    <div class="grid grid-cols-3 gap-6 text-sm">
+        <div>
+            <p class="text-text-disabled text-xs uppercase tracking-wider mb-2">Dimension Composite</p>
+            <p class="text-text-dark font-semibold text-lg">{{ result.dim_composite|floatformat:4 }}</p>
+        </div>
+        <div>
+            <p class="text-text-disabled text-xs uppercase tracking-wider mb-2">Cross-Encoder (sigmoid)</p>
+            <p class="text-text-dark font-semibold text-lg">{{ result.ce_sigmoid|floatformat:4 }}</p>
+            <p class="text-text-disabled text-xs">weight: {{ result.ce_weight_used|floatformat:2 }}</p>
+        </div>
+        <div>
+            <p class="text-text-disabled text-xs uppercase tracking-wider mb-2">Final Score</p>
+            <p class="font-bold text-2xl {% if result.final_score >= 0.7 %}text-success-main{% elif result.final_score >= 0.4 %}text-warning-main{% else %}text-error-main{% endif %}">
+                {{ result.final_score|floatformat:4 }}
+            </p>
+            {% if result.adversarial_penalty > 0 %}
+            <p class="text-error-main text-xs">penalty: -{{ result.adversarial_penalty|floatformat:2 }}</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Rationale -->
+{% if result.rationale %}
+<div class="bg-background-paper border border-divider-light rounded-xl p-6 mb-6">
+    <h2 class="text-text-dark font-medium mb-3">LLM Rationale</h2>
+    <p class="text-text-body text-sm leading-relaxed italic">"{{ result.rationale }}"</p>
+</div>
+{% endif %}
+
+<!-- Strengths + Gaps -->
+<div class="grid grid-cols-2 gap-4 mb-6">
+    <div class="bg-background-paper border border-divider-light rounded-xl p-6">
+        <h2 class="text-text-dark font-medium mb-3">Strengths</h2>
+        {% if result.strengths %}
+        <ul class="space-y-2">
+            {% for s in result.strengths %}
+            <li class="flex items-start gap-2 text-sm text-text-body">
+                <span class="text-success-main mt-0.5 flex-shrink-0">✓</span>
+                <span>{{ s }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="text-text-disabled text-sm">No strengths recorded.</p>
+        {% endif %}
+    </div>
+    <div class="bg-background-paper border border-divider-light rounded-xl p-6">
+        <h2 class="text-text-dark font-medium mb-3">Gaps</h2>
+        {% if result.gaps %}
+        <ul class="space-y-2">
+            {% for g in result.gaps %}
+            <li class="flex items-start gap-2 text-sm text-text-body">
+                <span class="text-error-main mt-0.5 flex-shrink-0">✗</span>
+                <span>{{ g }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="text-text-disabled text-sm">No gaps recorded.</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- D1 Skill detail (collapsible) -->
+{% if result.skill_detail %}
+<div class="bg-background-paper border border-divider-light rounded-xl mb-4 overflow-hidden">
+    <button class="collapsible-toggle w-full flex items-center justify-between px-6 py-4 text-left hover:bg-background-dust transition-colors" data-target="skill-detail">
+        <span class="text-text-dark font-medium">D1 — Skill Evidence</span>
+        <svg class="toggle-icon w-4 h-4 text-text-disabled transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+    </button>
+    <div id="skill-detail" class="hidden px-6 pb-5">
+        {% if result.skill_detail.skills_checked %}
+        <div class="space-y-3">
+            {% for skill in result.skill_detail.skills_checked %}
+            <div class="flex items-start justify-between py-2 border-b border-divider-light last:border-0">
+                <div class="flex-1">
+                    <span class="text-text-dark text-sm font-medium">{{ skill|skill_label }}</span>
+                    {% if skill.resume_match %}
+                    <span class="text-text-disabled text-xs">→ {{ skill.resume_match }}</span>
+                    {% endif %}
+                    {% if skill.evidence %}
+                    <p class="text-text-disabled text-xs mt-0.5 italic">{{ skill.evidence }}</p>
+                    {% endif %}
+                </div>
+                {% with badge=skill|skill_badge %}
+                <span class="ml-3 text-xs px-2 py-0.5 rounded font-medium flex-shrink-0
+                    {% if badge == 'exact' or badge == 'BUILT_WITH' %}bg-success-main text-white
+                    {% elif badge == 'adjacent' or badge == 'USED' or badge == 'llm_fallback' %}bg-info-main text-white
+                    {% elif badge == 'group' or badge == 'LISTED' %}bg-warning-main text-white
+                    {% else %}bg-error-main text-white{% endif %}">
+                    {{ badge }}
+                </span>
+                {% endwith %}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<!-- D2 Seniority detail (collapsible) -->
+{% if result.seniority_detail %}
+<div class="bg-background-paper border border-divider-light rounded-xl mb-4 overflow-hidden">
+    <button class="collapsible-toggle w-full flex items-center justify-between px-6 py-4 text-left hover:bg-background-dust transition-colors" data-target="seniority-detail">
+        <span class="text-text-dark font-medium">D2 — Experience Depth Signals</span>
+        <svg class="toggle-icon w-4 h-4 text-text-disabled transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+    </button>
+    <div id="seniority-detail" class="hidden px-6 pb-5">
+        {% if result.seniority_detail.signals %}
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-3">
+            {% for sig in result.seniority_detail.signals %}
+            <div class="py-2 px-3 bg-background-dust rounded-lg">
+                <p class="text-text-disabled text-xs uppercase">{{ sig.type }}</p>
+                <p class="text-text-dark font-medium">{{ sig.score|floatformat:2 }}</p>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% if result.seniority_detail.years_required %}
+        <p class="text-text-disabled text-xs">Years required: {{ result.seniority_detail.years_required }} · Total: {{ result.seniority_detail.total_years|default:"—" }} {% if result.seniority_detail.years_ok %}<span class="text-success-main">✓</span>{% else %}<span class="text-error-main">✗</span>{% endif %}</p>
+        {% endif %}
+        {% if result.seniority_detail.rationale %}
+        <p class="text-text-body text-sm mt-2 italic">"{{ result.seniority_detail.rationale }}"</p>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<!-- D3 Domain detail (collapsible) -->
+{% if result.domain_detail %}
+<div class="bg-background-paper border border-divider-light rounded-xl mb-4 overflow-hidden">
+    <button class="collapsible-toggle w-full flex items-center justify-between px-6 py-4 text-left hover:bg-background-dust transition-colors" data-target="domain-detail">
+        <span class="text-text-dark font-medium">D3 — Domain Fit</span>
+        <svg class="toggle-icon w-4 h-4 text-text-disabled transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+    </button>
+    <div id="domain-detail" class="hidden px-6 pb-5">
+        {% if result.domain_detail.reason %}
+        <p class="text-text-body text-sm italic">"{{ result.domain_detail.reason }}"</p>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<!-- D4 Constraints detail (collapsible) -->
+{% if result.constraint_detail %}
+<div class="bg-background-paper border border-divider-light rounded-xl mb-4 overflow-hidden">
+    <button class="collapsible-toggle w-full flex items-center justify-between px-6 py-4 text-left hover:bg-background-dust transition-colors" data-target="constraint-detail">
+        <span class="text-text-dark font-medium">D4 — Constraints Check</span>
+        <svg class="toggle-icon w-4 h-4 text-text-disabled transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+    </button>
+    <div id="constraint-detail" class="hidden px-6 pb-5">
+        <div class="space-y-2">
+            {% for check in result.constraint_detail %}
+            {% with status=check|constraint_status %}
+            <div class="flex items-center justify-between py-2 border-b border-divider-light last:border-0">
+                <span class="text-text-body text-sm">{{ check|constraint_label }}</span>
+                <span class="text-xs px-2 py-0.5 rounded font-medium flex-shrink-0
+                    {% if status == 'met' %}bg-success-main text-white
+                    {% elif status == 'partial' %}bg-warning-main text-white
+                    {% else %}bg-error-main text-white{% endif %}">
+                    {{ check|constraint_display }}
+                </span>
+            </div>
+            {% endwith %}
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Stage scores (collapsible) -->
+<div class="bg-background-paper border border-divider-light rounded-xl mb-4 overflow-hidden">
+    <button class="collapsible-toggle w-full flex items-center justify-between px-6 py-4 text-left hover:bg-background-dust transition-colors" data-target="stage-scores">
+        <span class="text-text-dark font-medium">Retrieval Stage Scores</span>
+        <svg class="toggle-icon w-4 h-4 text-text-disabled transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+    </button>
+    <div id="stage-scores" class="hidden px-6 pb-5">
+        <div class="grid grid-cols-3 gap-4 text-sm">
+            {% for key, val in result.stage_scores.items %}
+            <div class="py-2">
+                <p class="text-text-disabled text-xs uppercase tracking-wider">{{ key }}</p>
+                <p class="text-text-dark font-medium mt-0.5">{{ val }}</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- Adversarial report (collapsible, only if flagged) -->
+{% if result.threat_level != 'NONE' %}
+<div class="bg-background-paper border border-warning-main rounded-xl mb-4 overflow-hidden">
+    <button class="collapsible-toggle w-full flex items-center justify-between px-6 py-4 text-left hover:bg-background-dust transition-colors" data-target="threat-report">
+        <span class="text-warning-main font-medium">Adversarial Report — {{ result.threat_level }}</span>
+        <svg class="toggle-icon w-4 h-4 text-warning-main transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+    </button>
+    <div id="threat-report" class="hidden px-6 pb-5">
+        <p class="text-text-body text-sm mb-3">Penalty applied: {{ result.adversarial_penalty|floatformat:2 }}</p>
+        {% if result.threat_flags %}
+        <ul class="space-y-1.5">
+            {% for flag in result.threat_flags %}
+            <li class="text-sm text-warning-main">• {{ flag }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Raw resume text (collapsible) -->
+{% if result.resume.raw_text %}
+<div class="bg-background-paper border border-divider-light rounded-xl overflow-hidden">
+    <button class="collapsible-toggle w-full flex items-center justify-between px-6 py-4 text-left hover:bg-background-dust transition-colors" data-target="raw-resume">
+        <span class="text-text-dark font-medium">Resume Text</span>
+        <svg class="toggle-icon w-4 h-4 text-text-disabled transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+    </button>
+    <div id="raw-resume" class="hidden px-6 pb-5">
+        <pre class="text-text-body text-xs leading-relaxed whitespace-pre-wrap font-mono max-h-96 overflow-y-auto bg-background-dust rounded-lg p-4">{{ result.resume.raw_text }}</pre>
+    </div>
+</div>
+{% endif %}
+{% include 'components/resume_preview_modal.html' %}
+{% endblock %}
+{% block scripts %}
+<script type="module" src="{% static 'js/pages/candidate.js' %}"></script>
+{% endblock %}

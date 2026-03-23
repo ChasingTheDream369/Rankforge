@@ -1,0 +1,7 @@
+{% load matcher_tags %}
+{% with color=score|score_color %}
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold text-white
+    {% if color == 'success' %}bg-success-main{% elif color == 'warning' %}bg-warning-main{% else %}bg-error-main{% endif %}">
+    {{ score|floatformat:2 }}
+</span>
+{% endwith %}

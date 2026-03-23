@@ -1,0 +1,117 @@
+{% comment %}
+Resume Preview Modal — reusable component.
+{% include 'components/resume_preview_modal.html' %} once per page.
+Any element with class="preview-btn" data-resume-id data-resume-name triggers it.
+{% endcomment %}
+<div id="rpm-modal" class="fixed inset-0 z-50 hidden">
+  <div id="rpm-overlay" class="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
+  <div class="absolute inset-y-4 right-4 left-4 md:left-auto md:w-[720px] bg-background-paper border border-divider-light rounded-xl flex flex-col shadow-2xl overflow-hidden">
+
+    <!-- Header -->
+    <div class="flex items-center gap-3 px-5 py-3 border-b border-divider-light flex-shrink-0">
+      <h3 id="rpm-title" class="text-text-dark font-medium text-sm flex-1 truncate"></h3>
+      <div class="flex rounded-lg overflow-hidden border border-divider-light text-xs flex-shrink-0">
+        <button id="rpm-tab-pdf"  class="px-3 py-1.5 font-medium transition-colors">PDF</button>
+        <button id="rpm-tab-text" class="px-3 py-1.5 font-medium transition-colors">Text</button>
+      </div>
+      <button id="rpm-close" class="text-text-disabled hover:text-text-dark text-xl leading-none flex-shrink-0 ml-1">✕</button>
+    </div>
+
+    <!-- Loading -->
+    <div id="rpm-loading" class="flex-1 flex items-center justify-center text-text-disabled text-sm gap-2">
+      <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+      </svg>
+      Loading…
+    </div>
+
+    <!-- PDF pane -->
+    <div id="rpm-pdf-pane" class="hidden flex-1 flex flex-col min-h-0">
+      <iframe id="rpm-iframe" src="" class="flex-1 w-full border-0" style="min-height:0"></iframe>
+      <div id="rpm-no-pdf" class="hidden flex-1 flex flex-col items-center justify-center gap-3 text-text-disabled">
+        <p class="text-sm">No file uploaded — resume was added as plain text only.</p>
+        <button id="rpm-fallback-text" class="text-xs text-primary-main hover:underline">Switch to Text view</button>
+      </div>
+    </div>
+
+    <!-- Text pane -->
+    <div id="rpm-text-pane" class="hidden flex-1 overflow-y-auto p-5 min-h-0">
+      <pre id="rpm-text" class="text-text-body text-xs leading-relaxed whitespace-pre-wrap font-mono"></pre>
+    </div>
+
+  </div>
+</div>
+
+<script>
+$(() => {
+  const ACTIVE   = 'bg-primary-main text-white';
+  const INACTIVE = 'text-text-body hover:bg-background-contrast';
+
+  let cachedData = null;
+
+  const setTab = (tab) => {
+    const isPdf = tab === 'pdf';
+    $('#rpm-pdf-pane').toggleClass('hidden', !isPdf);
+    $('#rpm-text-pane').toggleClass('hidden', isPdf);
+    $('#rpm-tab-pdf').attr('class',  `px-3 py-1.5 font-medium transition-colors ${isPdf ? ACTIVE : INACTIVE}`);
+    $('#rpm-tab-text').attr('class', `px-3 py-1.5 font-medium transition-colors ${isPdf ? INACTIVE : ACTIVE}`);
+
+    if (isPdf && cachedData) {
+      if (cachedData.file_url) {
+        $('#rpm-no-pdf').addClass('hidden');
+        $('#rpm-iframe').removeClass('hidden');
+        if (!$('#rpm-iframe').attr('src') || $('#rpm-iframe').attr('src') === window.location.href) {
+          $('#rpm-iframe').attr('src', cachedData.file_url);
+        }
+      } else {
+        $('#rpm-iframe').addClass('hidden');
+        $('#rpm-no-pdf').removeClass('hidden');
+      }
+    }
+  };
+
+  const closeModal = () => {
+    $('#rpm-modal').addClass('hidden');
+    $('#rpm-iframe').attr('src', '');
+    cachedData = null;
+  };
+
+  window.openResumePreview = (resumeId, resumeName) => {
+    cachedData = null;
+    $('#rpm-title').text(resumeName || 'Resume Preview');
+    $('#rpm-loading').removeClass('hidden');
+    $('#rpm-pdf-pane, #rpm-text-pane').addClass('hidden');
+    $('#rpm-iframe').attr('src', '');
+    $('#rpm-modal').removeClass('hidden');
+
+    $.get(`/api/matching/resume/${resumeId}/preview/`)
+      .done((data) => {
+        cachedData = data;
+        $('#rpm-loading').addClass('hidden');
+        $('#rpm-text').text(data.text || '(no content extracted)');
+        $('#rpm-tab-pdf')
+          .prop('disabled', !data.file_url)
+          .css({ opacity: data.file_url ? '' : '0.4', cursor: data.file_url ? '' : 'not-allowed' });
+        setTab(data.file_url ? 'pdf' : 'text');
+      })
+      .fail(() => {
+        $('#rpm-loading').addClass('hidden');
+        $('#rpm-text').text('Failed to load resume content.');
+        cachedData = {};
+        setTab('text');
+      });
+  };
+
+  $('#rpm-tab-pdf').on('click',        () => { if (!$('#rpm-tab-pdf').prop('disabled')) setTab('pdf'); });
+  $('#rpm-tab-text').on('click',       () => setTab('text'));
+  $('#rpm-close, #rpm-overlay').on('click', closeModal);
+  $('#rpm-fallback-text').on('click',  () => setTab('text'));
+
+  // Global delegation — any .preview-btn on the page
+  $(document).on('click', '.preview-btn', function (e) {
+    e.stopPropagation();
+    window.openResumePreview($(this).data('resume-id'), $(this).data('resume-name'));
+  });
+});
+</script>

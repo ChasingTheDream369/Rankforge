@@ -1,0 +1,32 @@
+Senior Backend Engineer — FinPay (Series B Fintech)
+
+About FinPay:
+FinPay is a Series B fintech startup building real-time payment infrastructure for cross-border transactions. We process $2B+ in annual volume across 40 countries.
+
+Role:
+We are looking for a Senior Backend Engineer to design, build, and operate core payment processing systems. You will work on high-throughput, low-latency distributed systems that handle millions of transactions daily.
+
+Requirements:
+- 5+ years of backend engineering experience
+- Strong proficiency in Python and/or Go
+- Deep experience with ETL pipelines and data processing at scale
+- Hands-on with AWS services (ECS, Lambda, SQS, DynamoDB, S3)
+- Production experience with PostgreSQL and Redis
+- Familiarity with event-driven architectures (Kafka, RabbitMQ)
+- Experience building and operating microservices in containerized environments (Docker, Kubernetes)
+- Understanding of CI/CD pipelines and infrastructure-as-code (Terraform)
+
+Nice to Have:
+- Experience in fintech or payments domain
+- Knowledge of PCI-DSS compliance
+- AWS Solutions Architect certification (SAA)
+- Experience with GraphQL APIs
+- Contributions to open-source projects
+
+Responsibilities:
+- Design and implement payment processing microservices handling 10,000+ TPS
+- Build and maintain ETL pipelines for transaction reconciliation and reporting
+- Collaborate with the data team on real-time fraud detection infrastructure
+- Participate in on-call rotation and incident response
+- Mentor junior engineers and conduct code reviews
+- Write technical design documents and ADRs

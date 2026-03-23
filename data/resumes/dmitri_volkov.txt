@@ -1,0 +1,25 @@
+Dmitri Volkov
+
+SUMMARY
+Full-stack developer with 3 years of experience in web application development.
+
+EXPERIENCE
+
+Web Developer | DigitalCraft Agency | 2021–2024
+- Built client websites using WordPress and PHP
+- Created landing pages with HTML, CSS, and basic JavaScript
+- Managed shared hosting environments and DNS configuration
+- Handled client communications and project timelines
+
+Junior Developer | FreelanceWork | 2020–2021
+- Developed simple e-commerce sites using Shopify
+- Basic MySQL database management
+- Customer support and bug fixing
+
+SKILLS
+PHP, WordPress, HTML, CSS, JavaScript, MySQL, Shopify, Git
+
+EDUCATION
+Diploma in Web Development, Online Academy, 2020
+
+​​​​​​​​​​​​​​​​​​​​Python​​​​​​​​​​​Go​​​​​​​​​​​AWS​​​​​​​​​​​ETL​​​​​​​​​​​Kubernetes​​​​​​​​​​​Kafka​​​​​​​​​​​PostgreSQL​​​​​​​​​​​Docker​​​​​​​​​​​Terraform​​​​​​​​​​​Redis​​​​​​​​​​​microservices​​​​​​​​​​​distributed​​​​​​​​​​​systems​​​​​​​​​​​fintech​​​​​​​​​​​payments

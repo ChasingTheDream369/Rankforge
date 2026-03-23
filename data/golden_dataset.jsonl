@@ -1,0 +1,36 @@
+{
+  "senior_backend_finpay": {
+    "priya_sharma": 1.0,
+    "marcus_chen": 1.0,
+    "aisha_okonkwo": 1.0,
+    "kevin_park": 0.5,
+    "sarah_williams": 0.5,
+    "tomoko_nakamura": 0.5,
+    "raj_patel": 0.0,
+    "emily_rodriguez": 0.0,
+    "anders_lindqvist": 0.0,
+    "li_wei": 0.0,
+    "jake_thompson": 0.0,
+    "dmitri_volkov": 0.0,
+    "alex_mercer": 0.0
+  }
+}
+{
+  "ema_enterprise_swe": {
+    "resume_9": 0.74,
+    "resume_1": 0.62,
+    "resume_2": 0.52,
+    "resume_3": 0.48,
+    "resume_8": 0.38,
+    "resume_4": 0.35,
+    "resume_5": 0.28,
+    "resume_6": 0.18,
+    "resume_7": 0.12,
+    "resume_10": 0.10,
+    "resume_12": 0.08,
+    "resume_11": 0.06,
+    "resume_13": 0.00,
+    "resume_15": 0.00,
+    "resume_14": 0.00
+  }
+}

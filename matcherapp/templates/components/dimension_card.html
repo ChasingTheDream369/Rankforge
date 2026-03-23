@@ -1,0 +1,23 @@
+{% load matcher_tags %}
+<div class="bg-background-paper border border-divider-light rounded-xl p-5">
+    <div class="flex items-center justify-between mb-3">
+        <div>
+            <p class="text-xs text-text-disabled uppercase tracking-wider font-medium">{{ label }}</p>
+            <p class="text-xs text-text-disabled mt-0.5">Weight {{ weight }}</p>
+        </div>
+        <div class="text-right">
+            <span class="text-2xl font-bold {% if score >= 0.7 %}text-success-main{% elif score >= 0.4 %}text-warning-main{% else %}text-error-main{% endif %}">
+                {{ score|floatformat:2 }}
+            </span>
+        </div>
+    </div>
+    <div class="w-full bg-background-contrast rounded-full h-1.5 mb-3">
+        <div class="h-1.5 rounded-full transition-all
+            {% if score >= 0.7 %}bg-success-main{% elif score >= 0.4 %}bg-warning-main{% else %}bg-error-main{% endif %}"
+            style="width: {{ score|floatformat:0 }}0%">
+        </div>
+    </div>
+    {% if evidence %}
+    <p class="text-xs text-text-body leading-relaxed italic">"{{ evidence }}"</p>
+    {% endif %}
+</div>

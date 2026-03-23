@@ -1,0 +1,158 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Roadmap — Resume Matcher{% endblock %}
+{% block content %}
+<div class="mb-6">
+    <h1 class="text-text-dark text-2xl font-semibold">Production Roadmap</h1>
+    <p class="text-text-disabled text-sm mt-0.5">Next steps to harden and scale the system</p>
+</div>
+
+<div class="flex flex-col gap-5">
+
+    <!-- Knowledge Graph -->
+    <div class="bg-background-paper border border-divider-light rounded-xl overflow-hidden">
+        <div class="flex items-center gap-3 px-5 py-4 border-b border-divider-light bg-background-dust">
+            <span class="text-xs font-bold text-white bg-primary-main px-2.5 py-1 rounded-full">1</span>
+            <div>
+                <h2 class="text-sm font-semibold text-text-dark">LLM + Skill Knowledge Graph</h2>
+                <p class="text-xs text-text-disabled mt-0.5">LLM as brain, ESCO graph as translator</p>
+            </div>
+        </div>
+        <div class="px-5 py-4 text-sm text-text-body leading-relaxed space-y-2">
+            <p>Replace static regex skill extraction with a graph-grounded approach:</p>
+            <ul class="list-disc list-inside text-xs text-text-disabled space-y-1 ml-2">
+                <li>LLM extracts candidate skill mentions → normalised to ESCO concept URIs</li>
+                <li>Graph traversal finds same-level occupations and adjacent skills with configurable hop penalty</li>
+                <li>Scoring uses graph distance as partial credit rather than binary match</li>
+                <li>Enables "Python → NumPy → pandas → data wrangling" semantic chains without hard-coding synonyms</li>
+            </ul>
+            <p class="text-xs text-text-disabled mt-1 italic">Effort: ~2 weeks. Requires ESCO SPARQL endpoint or local RDF graph (rdflib). Impact: highest — fixes false negatives on equivalent technologies.</p>
+        </div>
+    </div>
+
+    <!-- Compliance -->
+    <div class="bg-background-paper border border-divider-light rounded-xl overflow-hidden">
+        <div class="flex items-center gap-3 px-5 py-4 border-b border-divider-light bg-background-dust">
+            <span class="text-xs font-bold text-white bg-primary-main px-2.5 py-1 rounded-full">2</span>
+            <div>
+                <h2 class="text-sm font-semibold text-text-dark">Compliance &amp; Bias Audit Layer</h2>
+                <p class="text-xs text-text-disabled mt-0.5">GDPR, EEOC, demographic parity</p>
+            </div>
+        </div>
+        <div class="px-5 py-4 text-sm text-text-body leading-relaxed space-y-2">
+            <p>Every scoring run should produce an immutable audit log:</p>
+            <ul class="list-disc list-inside text-xs text-text-disabled space-y-1 ml-2">
+                <li>PII redaction before any LLM call (name, address, DOB, photo detection)</li>
+                <li>Per-dimension score distribution across protected attribute proxies</li>
+                <li>Disparate impact ratio (4/5ths rule) flagged automatically</li>
+                <li>Signed audit record stored separately from main DB for legal hold</li>
+            </ul>
+            <p class="text-xs text-text-disabled mt-1 italic">Effort: ~1 week. <code class="bg-background-dust px-1 py-0.5 rounded font-mono">extras/compliance.py</code> is the starting point — needs DB persistence and per-run attachment.</p>
+        </div>
+    </div>
+
+    <!-- MCP Server -->
+    <div class="bg-background-paper border border-divider-light rounded-xl overflow-hidden">
+        <div class="flex items-center gap-3 px-5 py-4 border-b border-divider-light bg-background-dust">
+            <span class="text-xs font-bold text-white bg-primary-main px-2.5 py-1 rounded-full">3</span>
+            <div>
+                <h2 class="text-sm font-semibold text-text-dark">MCP Server Integration</h2>
+                <p class="text-xs text-text-disabled mt-0.5">Tool calls for ATS / recruiter copilots</p>
+            </div>
+        </div>
+        <div class="px-5 py-4 text-sm text-text-body leading-relaxed space-y-2">
+            <p>Expose the matching engine as an MCP-compatible tool server so recruiter AI assistants can call it directly:</p>
+            <ul class="list-disc list-inside text-xs text-text-disabled space-y-1 ml-2">
+                <li><code class="bg-background-dust px-1 py-0.5 rounded font-mono">match_resumes(jd, resumes[])</code> — returns ranked candidates with explanations</li>
+                <li><code class="bg-background-dust px-1 py-0.5 rounded font-mono">explain_score(resume_id)</code> — deep-dive on a single candidate</li>
+                <li><code class="bg-background-dust px-1 py-0.5 rounded font-mono">update_label(resume_id, label)</code> — human-in-the-loop feedback capture</li>
+            </ul>
+            <p class="text-xs text-text-disabled mt-1 italic"><code class="bg-background-dust px-1 py-0.5 rounded font-mono">extras/mcp_server.py</code> has the skeleton — needs FastAPI wrapper and auth token validation.</p>
+        </div>
+    </div>
+
+    <!-- Cost Tracker -->
+    <div class="bg-background-paper border border-divider-light rounded-xl overflow-hidden">
+        <div class="flex items-center gap-3 px-5 py-4 border-b border-divider-light bg-background-dust">
+            <span class="text-xs font-bold text-white bg-primary-main px-2.5 py-1 rounded-full">4</span>
+            <div>
+                <h2 class="text-sm font-semibold text-text-dark">Cost Tracker &amp; Budget Controls</h2>
+                <p class="text-xs text-text-disabled mt-0.5">Per-run token accounting and hard limits</p>
+            </div>
+        </div>
+        <div class="px-5 py-4 text-sm text-text-body leading-relaxed space-y-2">
+            <p>LLM costs accumulate fast at scale. Needed controls:</p>
+            <ul class="list-disc list-inside text-xs text-text-disabled space-y-1 ml-2">
+                <li>Token count logged per resume per stage (extraction, scoring, explanation)</li>
+                <li>Per-organisation monthly budget cap with soft warning + hard cutoff</li>
+                <li>Automatic fallback to deterministic scoring when budget exhausted</li>
+                <li>Cost breakdown surfaced in the dashboard per run</li>
+            </ul>
+            <p class="text-xs text-text-disabled mt-1 italic"><code class="bg-background-dust px-1 py-0.5 rounded font-mono">extras/cost_tracker.py</code> has the accounting logic — needs DB model and per-run association.</p>
+        </div>
+    </div>
+
+    <!-- Human-in-the-Loop -->
+    <div class="bg-background-paper border border-divider-light rounded-xl overflow-hidden">
+        <div class="flex items-center gap-3 px-5 py-4 border-b border-divider-light bg-background-dust">
+            <span class="text-xs font-bold text-white bg-primary-main px-2.5 py-1 rounded-full">5</span>
+            <div>
+                <h2 class="text-sm font-semibold text-text-dark">Human-in-the-Loop Feedback</h2>
+                <p class="text-xs text-text-disabled mt-0.5">Recruiter labels feed back into golden dataset</p>
+            </div>
+        </div>
+        <div class="px-5 py-4 text-sm text-text-body leading-relaxed space-y-2">
+            <p>Close the loop between recruiter decisions and model quality:</p>
+            <ul class="list-disc list-inside text-xs text-text-disabled space-y-1 ml-2">
+                <li>Thumbs up/down on candidate cards stored as relevance signals</li>
+                <li>Recruiter final decision (interviewed / hired / rejected) appended to golden dataset</li>
+                <li>Periodic re-evaluation of nDCG against accumulated labels surfaces model drift</li>
+                <li>Fine-tune LLM judge prompts or re-weight dimensions using feedback signal</li>
+            </ul>
+            <p class="text-xs text-text-disabled mt-1 italic"><code class="bg-background-dust px-1 py-0.5 rounded font-mono">extras/feedback.py</code> is the starting point.</p>
+        </div>
+    </div>
+
+    <!-- Parameter Tuning -->
+    <div class="bg-background-paper border border-divider-light rounded-xl overflow-hidden">
+        <div class="flex items-center gap-3 px-5 py-4 border-b border-divider-light bg-background-dust">
+            <span class="text-xs font-bold text-white bg-primary-main px-2.5 py-1 rounded-full">6</span>
+            <div>
+                <h2 class="text-sm font-semibold text-text-dark">Parameter Tuning</h2>
+                <p class="text-xs text-text-disabled mt-0.5">Optimize α blend weight and dimension weights against golden labels</p>
+            </div>
+        </div>
+        <div class="px-5 py-4 text-sm text-text-body leading-relaxed space-y-2">
+            <p>Current weights are set heuristically. With enough golden labels, tune via grid search or Bayesian optimization:</p>
+            <ul class="list-disc list-inside text-xs text-text-disabled space-y-1 ml-2">
+                <li><strong class="text-text-body">α (cross-encoder blend)</strong> — currently empirical; should be tuned per domain (tech vs. finance vs. healthcare)</li>
+                <li><strong class="text-text-body">D1–D4 dimension weights</strong> — 0.40/0.35/0.15/0.10 reflects general hiring priorities; role-type-specific weights will improve nDCG</li>
+                <li><strong class="text-text-body">RRF k constant</strong> — k=60 is the standard default; lower k rewards top-ranked results more aggressively</li>
+                <li>Run ablation study after each tuning iteration to track nDCG@3 and MRR on golden dataset</li>
+            </ul>
+            <p class="text-xs text-text-disabled mt-1 italic">Effort: ~1 day once golden dataset has 50+ labelled pairs. The ablation page gives immediate feedback.</p>
+        </div>
+    </div>
+
+    <!-- Infrastructure -->
+    <div class="bg-background-paper border border-divider-light rounded-xl overflow-hidden">
+        <div class="flex items-center gap-3 px-5 py-4 border-b border-divider-light bg-background-dust">
+            <span class="text-xs font-bold text-white bg-secondary-main px-2.5 py-1 rounded-full">INF</span>
+            <div>
+                <h2 class="text-sm font-semibold text-text-dark">Infrastructure Hardening</h2>
+                <p class="text-xs text-text-disabled mt-0.5">Replace in-process threads with proper task queue</p>
+            </div>
+        </div>
+        <div class="px-5 py-4 text-sm text-text-body leading-relaxed space-y-2">
+            <ul class="list-disc list-inside text-xs text-text-disabled space-y-1 ml-2">
+                <li>Replace <code class="bg-background-dust px-1 py-0.5 rounded font-mono">threading.Thread</code> with Celery + Redis for durable background jobs</li>
+                <li>Postgres for all state (replace SQLite) — needed for multi-worker deployments</li>
+                <li>S3 / object storage for resume files instead of local FS</li>
+                <li>Rate limiting on API endpoints (django-ratelimit)</li>
+                <li>SSE or WebSocket for real-time progress instead of client polling</li>
+            </ul>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

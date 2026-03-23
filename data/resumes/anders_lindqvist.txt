@@ -1,0 +1,29 @@
+Anders Lindqvist
+
+SUMMARY
+Site Reliability Engineer with 5 years of experience ensuring 99.99% uptime for large-scale distributed systems. Infrastructure automation specialist focused on observability and incident management.
+
+EXPERIENCE
+
+Senior SRE | CloudScale AB | 2021–2024
+- Managed Kubernetes clusters (200+ nodes) serving 50M requests/day
+- Built infrastructure automation using Terraform, Ansible, and Pulumi
+- Designed observability stack: Prometheus, Grafana, ELK, Jaeger for distributed tracing
+- Led incident response team; reduced MTTR from 45 minutes to 12 minutes
+- Implemented chaos engineering practices using Litmus and Gremlin
+
+DevOps Engineer | NordTech | 2019–2021
+- Built CI/CD pipelines using GitLab CI and ArgoCD for 30+ microservices
+- Managed AWS infrastructure (EKS, RDS, ElastiCache, CloudWatch)
+- Automated database backup and disaster recovery procedures
+- On-call rotation handling production incidents for payment platform
+
+SKILLS
+Kubernetes, Terraform, Ansible, AWS (EKS, RDS, ElastiCache), Docker, Prometheus, Grafana, ELK Stack, Jaeger, Bash, Python (scripting), Go (basic), CI/CD, Linux
+
+CERTIFICATIONS
+Certified Kubernetes Administrator (CKA)
+AWS DevOps Engineer – Professional
+
+EDUCATION
+MSc Computer Science, KTH Royal Institute of Technology, Stockholm, 2019

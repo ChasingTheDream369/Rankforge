@@ -1,0 +1,25 @@
+Raj Patel
+
+SUMMARY
+Machine Learning Engineer with 4 years of experience building predictive models and NLP systems. Passionate about applying deep learning to solve real-world problems.
+
+EXPERIENCE
+
+ML Engineer | InsightAI | 2021–2024
+- Developed credit scoring models using XGBoost and neural networks for lending platform
+- Built NLP pipeline for document classification processing 100K+ loan applications
+- Trained and deployed models using PyTorch, MLflow, and SageMaker
+- Designed feature engineering pipelines using PySpark and Airflow
+- Published 2 papers on fairness-aware machine learning at AAAI
+
+Data Scientist | AnalyticsCo | 2020–2021
+- Built recommendation engine using collaborative filtering and embeddings
+- Conducted A/B testing framework for model performance evaluation
+- Created dashboards using Streamlit and Plotly for business stakeholders
+
+SKILLS
+Python, PyTorch, TensorFlow, Scikit-learn, PySpark, Airflow, SQL, AWS SageMaker, MLflow, Pandas, NumPy, Jupyter, Git
+
+EDUCATION
+MS Machine Learning, Carnegie Mellon University, 2020
+BS Statistics, IIT Delhi, 2018

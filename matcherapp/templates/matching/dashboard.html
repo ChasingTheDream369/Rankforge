@@ -1,0 +1,103 @@
+{% extends 'base.html' %}
+{% load static matcher_tags %}
+{% block title %}Dashboard — Resume Matcher{% endblock %}
+{% block content %}
+<div class="mb-8">
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-text-dark text-2xl font-semibold">Dashboard</h1>
+            <p class="text-text-disabled text-sm mt-0.5">All matching runs and results</p>
+        </div>
+        <a href="{% url 'new_run' %}"
+           class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary-main hover:bg-primary-dark text-white font-medium text-sm transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+            New Matching Run
+        </a>
+    </div>
+
+    <!-- Stats row -->
+    <div class="grid grid-cols-4 gap-4 mb-8">
+        <div class="bg-background-paper border border-divider-light rounded-xl p-5">
+            <p class="text-text-disabled text-xs uppercase tracking-wider font-medium mb-2">Total Runs</p>
+            <p class="text-text-dark text-3xl font-bold">{{ total_runs }}</p>
+        </div>
+        <div class="bg-background-paper border border-divider-light rounded-xl p-5">
+            <p class="text-text-disabled text-xs uppercase tracking-wider font-medium mb-2">Total Resumes</p>
+            <p class="text-text-dark text-3xl font-bold">{{ total_resumes }}</p>
+        </div>
+        <div class="bg-background-paper border border-divider-light rounded-xl p-5">
+            <p class="text-text-disabled text-xs uppercase tracking-wider font-medium mb-2">Avg Top Score</p>
+            <p class="text-3xl font-bold {% if avg_score >= 0.7 %}text-success-main{% elif avg_score >= 0.4 %}text-warning-main{% else %}text-error-main{% endif %}">{{ avg_score }}</p>
+        </div>
+        <div class="bg-background-paper border border-divider-light rounded-xl p-5">
+            <p class="text-text-disabled text-xs uppercase tracking-wider font-medium mb-2">Last Run</p>
+            {% if last_run %}
+            <span class="text-xs px-2.5 py-1.5 rounded-lg font-medium
+                {% if last_run.status == 'complete' %}bg-success-main text-white
+                {% elif last_run.status == 'processing' %}bg-info-main text-white
+                {% elif last_run.status == 'failed' %}bg-error-main text-white
+                {% else %}bg-background-contrast text-text-body{% endif %}">
+                {{ last_run.status|title }}
+            </span>
+            {% else %}
+            <span class="text-text-disabled text-sm">No runs yet</span>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Runs table -->
+    <div class="bg-background-paper border border-divider-light rounded-xl overflow-hidden">
+        <div class="px-6 py-4 border-b border-divider-light">
+            <h2 class="text-text-dark font-medium">Recent Runs</h2>
+        </div>
+        {% if runs %}
+        <table class="w-full">
+            <thead>
+                <tr class="border-b border-divider-light">
+                    <th class="text-left px-6 py-3 text-text-disabled text-xs uppercase tracking-wider">Job</th>
+                    <th class="text-left px-6 py-3 text-text-disabled text-xs uppercase tracking-wider">Status</th>
+                    <th class="text-left px-6 py-3 text-text-disabled text-xs uppercase tracking-wider">Resumes</th>
+                    <th class="text-left px-6 py-3 text-text-disabled text-xs uppercase tracking-wider">Mode</th>
+                    <th class="text-left px-6 py-3 text-text-disabled text-xs uppercase tracking-wider">Created</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for run in runs %}
+                <tr class="border-b border-divider-light hover:bg-hover cursor-pointer transition-colors"
+                    onclick="window.location='{% url 'run_detail' run.id %}'">
+                    <td class="px-6 py-4">
+                        <p class="text-text-dark font-medium text-sm">{{ run.job.title }}</p>
+                    </td>
+                    <td class="px-6 py-4">
+                        <span class="text-xs px-2.5 py-1 rounded-full font-medium
+                            {% if run.status == 'complete' %}bg-success-main text-white
+                            {% elif run.status == 'processing' %}bg-info-main text-white
+                            {% elif run.status == 'failed' %}bg-error-main text-white
+                            {% else %}bg-background-contrast text-text-body{% endif %}">
+                            {{ run.status|title }}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4 text-text-body text-sm">
+                        {% if run.status == 'processing' %}{{ run.processed }}/{% endif %}{{ run.total_resumes }}
+                    </td>
+                    <td class="px-6 py-4 text-text-body text-sm">{{ run.scoring_mode|title }}</td>
+                    <td class="px-6 py-4 text-text-disabled text-sm">{{ run.created_at|date:"M d, H:i" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="py-16 text-center">
+            <p class="text-text-disabled text-sm mb-4">No runs yet. Create your first matching run.</p>
+            <a href="{% url 'new_run' %}" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary-main hover:bg-primary-dark text-white font-medium text-sm transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                New Matching Run
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script type="module" src="{% static 'js/pages/dashboard.js' %}"></script>
+{% endblock %}

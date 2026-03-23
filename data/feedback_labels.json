@@ -1,0 +1,8 @@
+{
+  "_meta": {
+    "description": "Feedback-influenced labels. Updated by recruiter review sessions.",
+    "purpose": "Weight calibration and drift monitoring. NOT for regression testing.",
+    "last_updated": null
+  },
+  "senior_backend_finpay": {}
+}

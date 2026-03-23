@@ -1,0 +1,115 @@
+{% extends 'base.html' %}
+{% load static matcher_tags %}
+{% block title %}Run #{{ run.id }} — Resume Matcher{% endblock %}
+{% block content %}
+<div id="run-data" data-run-id="{{ run.id }}" data-status="{{ run.status }}"></div>
+
+<!-- Header -->
+<div class="flex items-start justify-between mb-6">
+    <div>
+        <div class="flex items-center gap-3 mb-1">
+            <a href="{% url 'dashboard' %}" class="text-text-disabled hover:text-text-body text-sm transition-colors">← Dashboard</a>
+        </div>
+        <h1 class="text-text-dark text-2xl font-semibold">{{ run.job.title }}</h1>
+        <p class="text-text-disabled text-sm mt-0.5">Run #{{ run.id }} · {{ run.total_resumes }} resumes · {{ run.created_at|date:"M d, Y H:i" }}</p>
+    </div>
+    <div class="flex items-center gap-3">
+    {% if run.status == 'complete' %}
+    <a href="{% url 'api_export_csv' run.id %}"
+       class="px-3 py-1.5 rounded-lg text-xs font-medium border border-divider-light text-text-body hover:bg-hover transition-colors flex items-center gap-1.5">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+        </svg>
+        Export CSV
+    </a>
+    <button id="rescore-btn" class="px-3 py-1.5 rounded-lg text-xs font-medium border border-divider-light text-text-body hover:bg-hover transition-colors">
+        Re-score
+    </button>
+    {% endif %}
+    <span id="status-badge" class="px-3 py-1.5 rounded-lg text-xs font-medium
+        {% if run.status == 'complete' %}bg-success-main text-white
+        {% elif run.status == 'processing' %}bg-info-main text-white
+        {% elif run.status == 'failed' %}bg-error-main text-white
+        {% else %}bg-background-contrast text-text-body{% endif %}">
+        {{ run.status|title }}
+    </span>
+    </div>
+</div>
+
+<!-- Progress (shown while processing) -->
+{% if run.status == 'processing' or run.status == 'pending' %}
+<div id="progress-section" class="bg-background-paper border border-divider-light rounded-xl p-6 mb-6">
+    <div class="flex items-center justify-between mb-3">
+        <span class="text-text-dark text-sm font-medium">Processing resumes...</span>
+        <span id="progress-text" class="text-text-disabled text-sm">{{ run.processed }} / {{ run.total_resumes }}</span>
+    </div>
+    <div class="w-full bg-background-contrast rounded-full h-2">
+        <div id="progress-bar" class="h-2 rounded-full bg-primary-main transition-all"
+            style="width: {{ run.progress_pct }}%"></div>
+    </div>
+    <p class="text-text-disabled text-xs mt-2">Results will appear automatically when complete</p>
+</div>
+{% endif %}
+
+<!-- Results table -->
+<div id="results-section" class="bg-background-paper border border-divider-light rounded-xl overflow-hidden {% if run.status != 'complete' %}hidden{% endif %}">
+    <div class="px-6 py-4 border-b border-divider-light flex items-center justify-between">
+        <h2 class="text-text-dark font-medium">Ranked Candidates</h2>
+        <span class="text-text-disabled text-sm">{{ results|length }} candidates</span>
+    </div>
+    <div class="overflow-x-auto">
+        <table class="w-full">
+            <thead>
+                <tr class="border-b border-divider-light bg-background-dust">
+                    <th class="sort-header text-left px-4 py-3 text-text-disabled text-xs uppercase tracking-wider cursor-pointer hover:text-text-body" data-col="rank">Rank</th>
+                    <th class="sort-header text-left px-4 py-3 text-text-disabled text-xs uppercase tracking-wider cursor-pointer hover:text-text-body" data-col="name">Name</th>
+                    <th class="sort-header text-left px-4 py-3 text-text-disabled text-xs uppercase tracking-wider cursor-pointer hover:text-text-body" data-col="final_score">Score</th>
+                    <th class="text-left px-4 py-3 text-text-disabled text-xs uppercase tracking-wider">D1 Skills</th>
+                    <th class="text-left px-4 py-3 text-text-disabled text-xs uppercase tracking-wider">D2 Senior</th>
+                    <th class="text-left px-4 py-3 text-text-disabled text-xs uppercase tracking-wider">D3 Domain</th>
+                    <th class="text-left px-4 py-3 text-text-disabled text-xs uppercase tracking-wider">D4 Constraints</th>
+                    <th class="text-left px-4 py-3 text-text-disabled text-xs uppercase tracking-wider">Confidence</th>
+                    <th class="text-left px-4 py-3 text-text-disabled text-xs uppercase tracking-wider">Recommendation</th>
+                    <th class="text-left px-4 py-3 text-text-disabled text-xs uppercase tracking-wider">Threat</th>
+                    <th class="px-4 py-3"></th>
+                </tr>
+            </thead>
+            <tbody id="results-tbody">
+                {% for r in results %}
+                <tr class="border-b border-divider-light hover:bg-hover cursor-pointer transition-colors"
+                    data-rank="{{ r.rank }}" data-final_score="{{ r.final_score }}" data-name="{{ r.resume.name }}"
+                    onclick="if(!event.target.closest('.preview-btn')) window.location='{% url 'candidate_detail' r.id %}'">
+                    <td class="px-4 py-3 text-text-body font-medium">#{{ r.rank }}</td>
+                    <td class="px-4 py-3 text-text-dark font-medium">{{ r.resume.name }}</td>
+                    <td class="px-4 py-3">
+                        <span class="text-xs font-bold px-2.5 py-1 rounded-full text-white
+                            {% if r.final_score >= 0.70 %}bg-success-main{% elif r.final_score >= 0.40 %}bg-warning-main{% else %}bg-error-main{% endif %}">
+                            {{ r.final_score|floatformat:2 }}
+                        </span>
+                    </td>
+                    <td class="px-4 py-3 text-text-body text-sm">{{ r.d1_skills|floatformat:2 }}</td>
+                    <td class="px-4 py-3 text-text-body text-sm">{{ r.d2_seniority|floatformat:2 }}</td>
+                    <td class="px-4 py-3 text-text-body text-sm">{{ r.d3_domain|floatformat:2 }}</td>
+                    <td class="px-4 py-3 text-text-body text-sm">{{ r.d4_constraints|floatformat:2 }}</td>
+                    <td class="px-4 py-3"><span class="text-xs px-2 py-1 rounded bg-background-contrast text-text-body">{{ r.confidence }}</span></td>
+                    <td class="px-4 py-3 text-text-body text-xs">{{ r.recommendation|rec_label }}</td>
+                    <td class="px-4 py-3 text-xs {% if r.threat_level != 'NONE' %}text-warning-main font-medium{% else %}text-text-disabled{% endif %}">{{ r.threat_level }}</td>
+                    <td class="px-4 py-3">
+                        <button class="preview-btn text-xs px-2.5 py-1 rounded border border-divider-light text-text-body hover:bg-hover transition-colors"
+                            data-resume-id="{{ r.resume.id }}" data-resume-name="{{ r.resume.name }}">
+                            Preview
+                        </button>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="11" class="px-6 py-12 text-center text-text-disabled">No results yet</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% include 'components/resume_preview_modal.html' %}
+{% endblock %}
+{% block scripts %}
+<script type="module" src="{% static 'js/pages/run_detail.js' %}"></script>
+{% endblock %}

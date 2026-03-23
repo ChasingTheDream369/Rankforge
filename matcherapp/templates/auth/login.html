@@ -1,0 +1,65 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login — Resume Matcher</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+    :root { --color-background-default: #0f1117; --color-background-paper: #1e2130; --color-primary-main: #6366f1; --color-text-dark: #e2e8f0; --color-text-body: #94a3b8; --color-text-disabled: #475569; --color-divider-light: #2d3148; }
+    [data-theme='light'] { --color-background-default: #f8fafc; --color-background-paper: #ffffff; --color-text-dark: #0f172a; --color-text-body: #475569; --color-divider-light: #e2e8f0; }
+    * { box-sizing: border-box; }
+    body { background-color: var(--color-background-default); font-family: 'Inter', sans-serif; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    </style>
+    <script>
+    tailwind.config = {
+        theme: { extend: { colors: {
+            background: { default: 'var(--color-background-default)', paper: 'var(--color-background-paper)' },
+            text: { dark: 'var(--color-text-dark)', body: 'var(--color-text-body)', disabled: 'var(--color-text-disabled)' },
+            primary: { main: 'var(--color-primary-main)' },
+            divider: { light: 'var(--color-divider-light)' },
+        }}}
+    }
+    </script>
+</head>
+<body>
+<div class="w-full max-w-sm mx-auto">
+    <div class="text-center mb-8">
+        <div class="w-12 h-12 rounded-xl bg-primary-main flex items-center justify-center mx-auto mb-4">
+            <span class="text-white font-bold text-xl">R</span>
+        </div>
+        <h1 class="text-text-dark text-2xl font-semibold">Resume Matcher</h1>
+        <p class="text-text-disabled text-sm mt-1">Sign in to your account</p>
+    </div>
+    <div class="bg-background-paper border border-divider-light rounded-2xl p-8">
+        {% if messages %}
+        {% for msg in messages %}
+        <div class="mb-4 p-3 rounded-lg text-sm text-white bg-red-500">{{ msg }}</div>
+        {% endfor %}
+        {% endif %}
+        <form method="post" action="{% url 'login' %}">
+            {% csrf_token %}
+            <div class="mb-5">
+                <label class="block text-text-body text-sm font-medium mb-2">Username</label>
+                <input name="username" type="text" autocomplete="username" required
+                    class="w-full px-4 py-2.5 rounded-lg border border-divider-light bg-background-default text-text-dark text-sm focus:outline-none focus:border-primary-main transition-colors"
+                    placeholder="admin">
+            </div>
+            <div class="mb-6">
+                <label class="block text-text-body text-sm font-medium mb-2">Password</label>
+                <input name="password" type="password" autocomplete="current-password" required
+                    class="w-full px-4 py-2.5 rounded-lg border border-divider-light bg-background-default text-text-dark text-sm focus:outline-none focus:border-primary-main transition-colors"
+                    placeholder="••••••••">
+            </div>
+            <button type="submit"
+                class="w-full py-2.5 rounded-lg bg-primary-main hover:bg-primary-dark text-white font-medium text-sm transition-colors">
+                Sign in
+            </button>
+        </form>
+    </div>
+    <p class="text-center text-text-disabled text-xs mt-6">Resume Matcher MVP — AI-powered candidate ranking</p>
+</div>
+</body>
+</html>

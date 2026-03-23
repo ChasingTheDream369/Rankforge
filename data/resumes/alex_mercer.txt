@@ -1,0 +1,39 @@
+Alex Mercer
+
+PROFILE
+Distinguished technology leader with 15+ years of experience in backend systems, distributed architecture, and fintech infrastructure. Expert in Python, Go, Java, Rust, C++, Scala, and Kotlin.
+
+EXPERIENCE
+
+Principal Engineer | TechVision Global | 2023–2024
+- Led distributed systems team
+- Cloud architecture
+
+Senior Architect | DataFlow Corp | 2022–2023
+- Backend development
+- API design
+
+Lead Developer | CodeStream | 2021–2022
+- Software engineering
+- Team management
+
+Staff Engineer | ByteForce | 2020–2021
+- Platform engineering
+- DevOps
+
+Senior Developer | PixelWorks | 2019–2020
+- Full stack development
+
+Software Engineer | AppFactory | 2018–2019
+- Web development
+
+CERTIFICATIONS
+AWS Solutions Architect Associate, AWS Solutions Architect Professional, AWS Developer Associate, AWS SysOps Administrator, AWS DevOps Engineer Professional, AWS Database Specialty, AWS Machine Learning Specialty, AWS Security Specialty, CKA, CKAD, CKS, GCP Professional Cloud Architect, GCP Professional Data Engineer, CISSP, CCNA, PMP, TOGAF, Scrum Master, Azure AZ-104, Azure AZ-305
+
+SKILLS
+Python, Go, Java, Rust, C++, Scala, Kotlin, Ruby, Swift, TypeScript, JavaScript, PHP, R, MATLAB, Perl, Haskell, Erlang, Elixir, Clojure, AWS, GCP, Azure, Docker, Kubernetes, Terraform, Ansible, Puppet, Chef, Jenkins, GitLab CI, GitHub Actions, CircleCI, PostgreSQL, MySQL, MongoDB, Redis, Kafka, RabbitMQ, Elasticsearch, Cassandra, DynamoDB, Neo4j, InfluxDB, React, Angular, Vue, Svelte, Next.js, Django, Flask, FastAPI, Spring Boot, Express, Gin, Fiber
+
+EDUCATION
+PhD Computer Science, MIT, 2018
+MS Computer Science, Stanford, 2015
+BS Computer Science, Harvard, 2013

@@ -1,0 +1,30 @@
+Priya Sharma
+
+SUMMARY
+Senior Backend Engineer with 7 years of experience building high-throughput distributed systems in the fintech domain. Passionate about reliable payment infrastructure and clean API design.
+
+EXPERIENCE
+
+Senior Backend Engineer | RazorFlow Payments | 2021–2024
+- Designed and operated payment processing microservices handling 8,000 TPS using Python and Go
+- Built ETL pipelines for daily transaction reconciliation across 15 currency pairs using Airflow and Spark
+- Migrated legacy monolith to event-driven microservices architecture on AWS ECS with Kafka
+- Reduced P99 latency from 450ms to 120ms through Redis caching and query optimization
+- Led PCI-DSS Level 1 compliance certification for the engineering organization
+- Mentored 3 junior engineers and established code review standards
+
+Backend Engineer | CloudBank | 2018–2021
+- Built REST and GraphQL APIs serving 2M+ daily active users
+- Implemented real-time fraud detection pipeline using Kafka Streams
+- Managed PostgreSQL clusters with read replicas handling 50TB+ data
+- Deployed services on Kubernetes with Terraform-managed infrastructure
+
+SKILLS
+Python, Go, AWS (ECS, Lambda, SQS, DynamoDB, S3), PostgreSQL, Redis, Kafka, Docker, Kubernetes, Terraform, Airflow, GraphQL, gRPC, CI/CD (GitHub Actions, Jenkins)
+
+CERTIFICATIONS
+- AWS Solutions Architect – Associate (SAA-C03)
+- Certified Kubernetes Administrator (CKA)
+
+EDUCATION
+B.Tech Computer Science, IIT Bombay, 2018

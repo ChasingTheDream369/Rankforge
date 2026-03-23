@@ -1,0 +1,27 @@
+Marcus Chen
+
+PROFILE
+Experienced platform engineer specializing in data ingestion workflows and real-time processing systems. 6 years building scalable backend services for financial technology companies.
+
+WORK HISTORY
+
+Platform Engineer | TransactIQ | 2020–2024
+- Architected data ingestion workflows processing 15M events/day for payment settlement systems
+- Built containerized microservices in Python deployed on AWS ECS with auto-scaling
+- Designed event-driven architecture using Amazon SQS and SNS for asynchronous payment processing
+- Implemented comprehensive monitoring with Datadog, PagerDuty on-call rotation
+- Operated DynamoDB tables with 100K+ WCU for real-time transaction lookups
+- Drove infrastructure-as-code adoption using Terraform across 3 engineering teams
+
+Software Engineer | DataPipe Inc | 2018–2020
+- Developed batch and streaming data pipelines using Apache Spark and Python
+- Managed PostgreSQL databases with partitioning strategies for time-series financial data
+- Built Redis-backed caching layers reducing API response times by 60%
+- Containerized applications with Docker, deployed on Kubernetes clusters
+
+TECHNICAL SKILLS
+Python, Go (learning), AWS (ECS, Lambda, SQS, SNS, DynamoDB, S3, CloudWatch), PostgreSQL, Redis, Apache Spark, Docker, Kubernetes, Terraform, Datadog, Git
+
+EDUCATION
+MS Computer Science, University of Michigan, 2018
+BS Mathematics, UCLA, 2016

@@ -1,0 +1,28 @@
+Aisha Okonkwo
+
+SUMMARY
+Senior Software Engineer with 8 years of experience in backend development and distributed systems. Led payment gateway engineering at a major African fintech processing $500M annually.
+
+EXPERIENCE
+
+Senior Software Engineer | PayStack (acquired by Stripe) | 2019–2024
+- Led backend team of 5 engineers building payment gateway infrastructure in Go and Python
+- Designed and maintained ETL pipelines for transaction reporting and regulatory compliance
+- Built event-driven payment notification system using RabbitMQ and Redis
+- Managed AWS infrastructure (EC2, RDS, S3, CloudFront) serving 12 African markets
+- Implemented automated CI/CD pipelines using GitHub Actions and ArgoCD
+- Drove PostgreSQL performance optimization reducing query times by 70%
+
+Backend Developer | FirstBank Digital | 2016–2019
+- Built REST APIs for mobile banking platform serving 3M users
+- Developed batch processing jobs for end-of-day reconciliation using Python and Celery
+- Implemented database migration strategies for zero-downtime deployments
+
+SKILLS
+Go, Python, PostgreSQL, Redis, RabbitMQ, AWS (EC2, RDS, S3, Lambda), Docker, Kubernetes, Terraform, GitHub Actions, ArgoCD, gRPC
+
+CERTIFICATIONS
+AWS Solutions Architect – Associate (SAA-C03)
+
+EDUCATION
+BSc Computer Science, University of Lagos, 2016

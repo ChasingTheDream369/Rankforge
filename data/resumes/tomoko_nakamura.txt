@@ -1,0 +1,24 @@
+Tomoko Nakamura
+
+PROFILE
+Full-stack engineer with 5 years of experience, primarily focused on frontend architecture with growing backend expertise. Building scalable web applications for SaaS products.
+
+EXPERIENCE
+
+Senior Frontend Engineer | SaaSGrid | 2021–2024
+- Led frontend architecture for enterprise dashboard serving 50K+ users using React and TypeScript
+- Built Node.js BFF (Backend-for-Frontend) layer handling API aggregation and caching
+- Implemented real-time data streaming using WebSockets and Redis pub/sub
+- Contributed to Python microservices for user analytics and reporting
+- Managed CI/CD pipelines using GitHub Actions deploying to AWS ECS
+
+Frontend Developer | WebFlow Studio | 2019–2021
+- Built responsive web applications using React, Redux, and Tailwind CSS
+- Developed REST API integrations with Django backend
+- Wrote end-to-end tests with Cypress and unit tests with Jest
+
+SKILLS
+TypeScript, React, Node.js, Python, Django, PostgreSQL, Redis, AWS (ECS, S3, CloudFront), Docker, GraphQL, Tailwind CSS, Cypress, Jest
+
+EDUCATION
+BS Information Technology, Tokyo Institute of Technology, 2019

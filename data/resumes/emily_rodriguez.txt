@@ -1,0 +1,25 @@
+Emily Rodriguez
+
+ABOUT
+Growth Marketing Manager with 5 years of experience driving user acquisition and retention for B2B SaaS products. Data-driven decision maker with strong analytical skills.
+
+EXPERIENCE
+
+Senior Growth Manager | ScaleUp HQ | 2021–2024
+- Managed $2M annual advertising budget across Google Ads, LinkedIn, and Meta platforms
+- Built attribution models using SQL and Looker to track customer acquisition costs
+- Led team of 3 marketing analysts; increased qualified leads by 150% YoY
+- Designed and executed A/B testing programs for landing pages and email campaigns
+- Collaborated with engineering on marketing data pipeline and event tracking
+
+Marketing Analyst | GrowthLab | 2019–2021
+- Analyzed customer cohort data using SQL and Google Analytics
+- Created automated reporting dashboards in Tableau
+- Managed SEO strategy resulting in 200% organic traffic increase
+
+SKILLS
+Google Ads, LinkedIn Ads, Meta Business Suite, SQL, Looker, Tableau, Google Analytics, Hubspot, Salesforce, SEO/SEM, A/B Testing, Excel, Segment
+
+EDUCATION
+MBA, Northwestern Kellogg School of Management, 2019
+BA Communications, University of Texas at Austin, 2017

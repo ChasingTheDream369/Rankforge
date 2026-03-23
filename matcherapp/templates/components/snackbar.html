@@ -1,0 +1,15 @@
+<div id="snackbar-container"></div>
+<script>
+function showSnackbar(type, message, duration = 4000) {
+    const container = document.getElementById('snackbar-container');
+    const item = document.createElement('div');
+    item.className = `snackbar-item snackbar-${type}`;
+    item.textContent = message;
+    container.appendChild(item);
+    setTimeout(() => {
+        item.style.opacity = '0';
+        item.style.transition = 'opacity 0.3s';
+        setTimeout(() => item.remove(), 300);
+    }, duration);
+}
+</script>

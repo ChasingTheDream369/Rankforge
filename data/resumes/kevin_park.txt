@@ -1,0 +1,28 @@
+Kevin Park
+
+ABOUT ME
+Backend developer with 2 years of experience, eager to grow in a fast-paced environment. Currently focused on Python web development and cloud services.
+
+EXPERIENCE
+
+Junior Backend Developer | ShopEasy | 2022–2024
+- Built and maintained REST APIs using Python and FastAPI for e-commerce platform
+- Wrote ETL scripts for product catalog synchronization across 3 marketplaces
+- Deployed services on AWS ECS with Docker containers
+- Used PostgreSQL for transactional data and Redis for session caching
+- Participated in on-call rotation and resolved production incidents
+
+Intern | TechStart Labs | Summer 2022
+- Developed internal data processing tools using Python and pandas
+- Assisted in migrating legacy scripts to AWS Lambda functions
+- Wrote unit tests using pytest achieving 85% code coverage
+
+SKILLS
+Python, FastAPI, Django, PostgreSQL, Redis, AWS (ECS, Lambda, S3), Docker, Git, pytest
+
+EDUCATION
+BS Computer Science, Georgia Tech, 2022
+
+PROJECTS
+- Open-source contribution to FastAPI middleware for rate limiting
+- Personal project: Real-time stock price tracker using WebSockets and Redis

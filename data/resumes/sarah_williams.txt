@@ -1,0 +1,29 @@
+Dr. Sarah Williams
+
+SUMMARY
+Senior Software Engineer with 6 years of experience building HIPAA-compliant healthcare data platforms. Expert in data pipeline architecture and cloud infrastructure for clinical research.
+
+EXPERIENCE
+
+Senior Data Platform Engineer | MedTech Solutions | 2020–2024
+- Architected HIPAA-compliant data lake on AWS processing 500GB/day of clinical trial data
+- Built ETL pipelines using Python, Airflow, and dbt for patient data harmonization
+- Designed event-driven ingestion using Kafka for real-time vitals monitoring
+- Managed PostgreSQL and Redshift clusters for analytics workloads
+- Led team of 4 engineers; conducted technical interviews and sprint planning
+
+Software Engineer | HealthOS | 2018–2020
+- Developed Python microservices for electronic health records integration
+- Built FHIR-compliant REST APIs serving 200+ healthcare providers
+- Deployed on AWS using Docker and ECS with Terraform automation
+
+SKILLS
+Python, SQL, AWS (ECS, Lambda, S3, Redshift, Glue), PostgreSQL, Kafka, Airflow, dbt, Docker, Terraform, FHIR/HL7, Pandas, Spark
+
+CERTIFICATIONS
+AWS Solutions Architect – Associate (SAA-C03)
+HIPAA Privacy and Security Certification
+
+EDUCATION
+PhD Biomedical Informatics, Stanford University, 2018
+MS Computer Science, Stanford University, 2015

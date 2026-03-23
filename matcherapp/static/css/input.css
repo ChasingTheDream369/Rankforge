@@ -1,0 +1,70 @@
+/**
+ * input.css — form input and file-upload component styles.
+ * Uses CSS variables from base.html :root — no hardcoded colours.
+ * All structural spacing uses Tailwind classes in templates;
+ * this file covers only states that Tailwind can't express directly.
+ */
+
+/* ── Text inputs, textareas, selects ──────────────────────────────────────── */
+.rm-input {
+    display: block;
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    background: var(--color-background-dust);
+    border: 1px solid var(--color-divider-light);
+    border-radius: 0.5rem;
+    color: var(--color-text-dark);
+    font-size: 0.875rem;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    outline: none;
+}
+
+.rm-input::placeholder {
+    color: var(--color-text-disabled);
+}
+
+.rm-input:focus {
+    border-color: var(--color-primary-main);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+.rm-input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* ── Drag-drop upload zone ────────────────────────────────────────────────── */
+.rm-dropzone {
+    border: 2px dashed var(--color-divider-light);
+    border-radius: 0.75rem;
+    background: var(--color-background-dust);
+    transition: border-color 0.15s, background 0.15s;
+    cursor: pointer;
+    user-select: none;
+}
+
+.rm-dropzone:hover,
+.rm-dropzone.drag-over {
+    border-color: var(--color-primary-main);
+    background: var(--color-hover);
+}
+
+/* ── Native file input — hidden, triggered via JS ────────────────────────── */
+input[type="file"].rm-file-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* ── Select dropdown ─────────────────────────────────────────────────────── */
+select.rm-input {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.6rem center;
+    background-size: 1rem;
+    padding-right: 2rem;
+}

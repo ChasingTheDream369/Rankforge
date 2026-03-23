@@ -1,0 +1,105 @@
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+*.manifest
+*.spec
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.cover
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.log
+
+# ── Virtual environments ──────────────────────────────────────────────────────
+venv/
+env/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+
+# ── Environment & secrets ────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+*.env
+!.env.example
+
+# ── Django ───────────────────────────────────────────────────────────────────
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+media/
+staticfiles/
+*.pot
+celerybeat-schedule
+celerybeat.pid
+
+# ── Data & indexes (generated/runtime) ───────────────────────────────────────
+data/index/documents.json
+data/index/index_meta.json
+data/index/skills_cache.json
+data/index/dense_index.npy
+data/index/*.faiss
+data/index/*.pkl
+media/resumes/*
+!media/resumes/.gitkeep
+
+# ── ML / HuggingFace cache ───────────────────────────────────────────────────
+.cache/
+.cache/huggingface/
+~/.cache/huggingface/
+*.bin
+*.safetensors
+*.onnx
+*.pt
+*.pth
+
+# ── IDE & editors ─────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+.cursor/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+
+# ── OS ───────────────────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# ── Jupyter ───────────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# ── Misc ────────────────────────────────────────────────────────────────────
+*.bak
+*.tmp
+*.temp
+*.orig
+.cache
