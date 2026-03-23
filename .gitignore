@@ -55,6 +55,7 @@ celerybeat.pid
 # ── Zips & ablation artifacts ────────────────────────────────────────────────
 *.zip
 score_ablation_resumes.py
+data/ablation_resumes/
 
 # ── Data & indexes (generated/runtime) ───────────────────────────────────────
 data/index/documents.json
