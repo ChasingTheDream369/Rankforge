@@ -111,4 +111,5 @@ Desktop.ini
 *.tmp
 *.temp
 *.orig
+*.tex
 .cache

@@ -2,7 +2,7 @@
 
 **Take-Home Assignment: Client Presentation**
 
-An AI-powered resume screening system built as a proof-of-concept (POC) for enterprise Talent Acquisition. The core proposition is **explainable scoring** — every resume receives a 0–1 relevance score broken into four interpretable dimensions, each traceable to specific evidence extracted from the resume text.
+An AI-powered resume screening system built as a proof-of-concept (POC) for enterprise Talent Acquisition. The core proposition is **explainable scoring** — every resume receives a 0–1 relevance score broken into four interpretable dimensions (plus CE blend), each traceable to specific evidence. Future: optimize dimension and CE weights jointly from labeled data.
 
 ---
 
@@ -18,6 +18,7 @@ An AI-powered resume screening system built as a proof-of-concept (POC) for ente
 8. [Setup & Usage](#setup--usage)
 9. [Project Structure](#project-structure)
 10. [Known Limitations](#known-limitations)
+11. [References](#references)
 
 ---
 
@@ -73,7 +74,7 @@ A **Python-based matching engine** that:
 | **Hybrid retrieval (BM25 + dense)** | BM25 catches exact keywords; dense catches paraphrases and synonyms. Together they cover both “Kafka” and “event streaming platforms”. | Two indices to maintain; RRF fusion adds minimal overhead |
 | **RRF fusion (k=60)** | Parameter-free; no score calibration across retrievers; robust to scale differences between BM25 and cosine similarity | Fixed k may not be optimal for all corpus sizes |
 | **Cross-encoder rerank** | Highest quality relevance signal for [JD, resume] pairs; catches inflated language (“used Python once” vs “led Python backend”) | Expensive: O(n) pairwise calls; applied only to top 50% of RRF pool |
-| **4D weighted scoring** | Explainable: recruiters see D1 (skills), D2 (seniority), D3 (domain), D4 (constraints). Each dimension has clear evidence. | Fixed weights (0.40/0.35/0.15/0.10) may not suit all roles |
+| **4D + CE scoring** | Explainable: D1 (skills), D2 (seniority), D3 (domain), D4 (constraints) + CE at fixed 25%. All candidates get normalized CE score. | Fixed weights; future: optimize D1–D4 and CE blend jointly from labels |
 | **Ontology (ESCO-style)** | Skill alias normalisation (e.g. “rabbitmq” ≈ “kafka” as adjacent); partial credit for related skills | Ontology coverage limited; LLM fallback when skill not in graph |
 
 ### Alternatives Considered
@@ -171,7 +172,7 @@ Job Description  +  Resumes (PDF / DOCX / PNG / LaTeX / TXT / ZIP)
        │         ┌─────────────────────────────────────────────┐
        │         │  FINAL SCORE FORMULA                        │
        │         │  dim = 0.40·D1 + 0.35·D2 + 0.15·D3 + 0.10·D4│
-       │         │  α = min(0.25, 0.25·(N−1)/5)               │
+       │         │  raw = 0.75·dim + 0.25·σ(ce_logit)        │
        │         │  raw = (1−α)·dim + α·sigmoid(ce_logit)      │
        │         │  final = raw · (1 − adversarial_penalty)     │
        │         └─────────────────────────────────────────────┘
@@ -190,12 +191,64 @@ Job Description  +  Resumes (PDF / DOCX / PNG / LaTeX / TXT / ZIP)
 | **D3 — Domain Fit** | 0.15 | Same domain=1.0, adjacent=0.5–0.8, unrelated=0.0–0.3 |
 | **D4 — Hard Constraints** | 0.10 | Fraction of hard_constraints met (years, certs, location, etc.) |
 
+### Retrieval Formulation: CE Top 50% + Rank-Wise Full Coverage
+
+The cross-encoder is expensive (O(n) pairwise [JD, resume] calls). We apply it only to the **top CE_TOP_PERCENT** of the RRF pool (env, default 50% → top 25 of 50). **All other docs** receive a RRF rank-derived logit.
+
+**RRF over all docs:** RRF fusion runs over the **full corpus**. Every doc gets a rank-based score; no one gets `ce_logit = -10`.
+
+| Position | What happens | ce_logit source |
+|----------|--------------|------------------|
+| **Top CE_TOP_PERCENT** of RRF pool (default 50%) | Real cross-encoder; rank-based scores in (0.01, 0.99), converted to logits | Real CE output |
+| **All remaining** | RRF rank-derived fractional score, linear decay by position; converted to logit | RRF-derived |
+
+**CE blend:** Fixed 75% dim + 25% CE. **CE_TOP_PERCENT** (env, 0–100, default 50): % of RRF pool that goes through real CE.
+
+### Scoring Formulation: Layer by Layer
+
+The final score is built in clearly separated layers. If we change a layer tomorrow, we update only that layer.
+
+**Layer 1 — Dimension composite (75–100% of raw score):**
+
+\[
+\text{dim} = 0.40 \cdot D1 + 0.35 \cdot D2 + 0.15 \cdot D3 + 0.10 \cdot D4
+\]
+
+- **D1 (Skills, 40%):** Per required skill: BUILT_WITH=1.0, USED=0.7, LISTED=0.3, ABSENT=0.0. Ontology gives exact/adjacent/group credit. Weighted average; core skills weighted higher.
+- **D2 (Seniority, 35%):** Four signals (leadership, architecture, scale, ownership) from `seniority_signals` + `total_years`. Agent + deterministic tools when enabled; else regex/heuristics.
+- **D3 (Domain, 15%):** Same domain=1.0, adjacent=0.5–0.8, unrelated=0.0–0.3. Ontology + LLM fallback when domain missing.
+- **D4 (Constraints, 10%):** Per hard constraint: met=1.0, partial=0.5, not met=0.0. Average across constraints.
+
+**Layer 2 — CE weight (fixed):**
+
+\[
+\alpha = 0.25
+\]
+
+**Layer 3 — Raw score blend:**
+
+\[
+\text{raw} = 0.75 \cdot \text{dim} + 0.25 \cdot \sigma(\text{ce\_logit})
+\]
+
+- `σ(logit) = 1/(1 + exp(-logit))`. CE contributes 25% for all candidates.
+
+**Layer 4 — Adversarial penalty:**
+
+\[
+\text{final} = \max(0, \min(1, \text{raw} \times (1 - \text{adversarial\_penalty})))
+\]
+
+- Penalty (0–0.95) comes from the 7 sanitizer detectors. Multiplicative; does not reject, but reduces score.
+
+**Summary:** 75% dim + 25% CE (fixed); then multiplied by (1 − penalty). Each layer is independent; changes are local.
+
 ### Two Execution Paths
 
 | Path | Retrieval | ce_logit | Use Case |
 |------|-----------|----------|----------|
 | **CLI / `demo.py` / `pipeline.py`** | Full hybrid (BM25 + dense + RRF + CE) | Real CE logit from engine | Research, ablation, evaluation |
-| **Django Web UI (`services.py`)** | None (per-resume scoring only) | 0.0 (CE contributes 0.5 when α>0) | Operational simplicity; no shared index |
+| **Django Web UI (`services.py`)** | None (per-resume scoring only) | 0.0 → sigmoid=0.5, CE term = 12.5% | Operational simplicity; no shared index |
 
 ---
 
@@ -327,25 +380,47 @@ If a larger, labeled dataset were available, we would:
 
 ## Future Steps & Production Roadmap
 
-### Short-term (POC → MVP)
+### Phase 1 — Demo-Ready
 
-1. **Forward profiles into result** — Surface `skill_detail`, `jd_profile`, `resume_profile` in candidate detail UI
-2. **JD-adaptive weights** — Derive D1–D4 weights from `jd_profile["seniority"]` (junior vs staff)
-3. **Domain-matched few-shot bank** — Add AI/ML examples; select by `jd_profile["domain"]` at scoring time
-4. **Confidence calibration** — Replace stub with signal-based logic (BUILT_WITH ratio, ABSENT ratio, CE divergence)
+- **Optimized weights** — Joint optimization of dimension weights (D1–D4) and CE blend from golden labels; grid or gradient-based search for best nDCG
+- **Surface `skill_detail` and profiles** in candidate detail UI — per-skill evidence table, `jd_profile`, `resume_profile`
+- **JD-adaptive weights** — Derive D1–D4 weights from `jd_profile["seniority"]` (junior vs staff)
+- **Domain-matched few-shot bank** — Add AI/ML examples; select by `jd_profile["domain"]` at scoring time
+- **Confidence calibration** — BUILT_WITH ratio + ABSENT ratio + CE divergence from `dim_composite`
 
-### Medium-term (Scale & Reliability)
+### Phase 2 — Knowledge Graph & Skill Intelligence
 
-5. **Parameter tuning** — Grid search on α blend and D1–D4 weights against growing golden dataset
-6. **Django retrieval integration** — Run `RetrievalEngine` in `services.py` for true hybrid ranking (shared index or per-run index)
-7. **Production infrastructure** — Celery + Redis for durable jobs; PostgreSQL; S3 file storage; SSE for real-time progress
-8. **Cost controls** — Budget caps; per-call token accounting (`extras/cost_tracker.py`)
+- **ESCO (13,485 skills, 1.3M co-occurrence edges):** canonical skill resolution + adjacency + graph expansion; ontology as source of truth for exact/adjacent/group matching
+- **O\*NET crosswalk:** importance weights per skill per occupation (e.g. Python = 5/5 for Backend Engineer, 1/5 for Marketing Manager)
+- **Lightcast Open Skills (32K skills, biweekly updates):** captures emerging skills ESCO/O\*NET lag on (“agentic workflows”, “prompt engineering”)
+- **KG as translation layer** between LLM reasoning and deterministic grounding — LLM outputs normalised via KG before D1–D4 computation
 
-### Compliance & Audit
+### Phase 3 — MCP Integration
 
-9. **GDPR PII redaction** — Before storage/audit (`extras/compliance.py`)
-10. **Bias audit** — Four-fifths rule enforcement; signed audit log per run
-11. **Feedback loop** — Recruiter decisions → golden dataset (`extras/feedback.py`)
+- **MCP server** (`extras/mcp_server.py`) with 9 tools: `match`, `score`, `explain`, `audit`, `feedback`, etc.
+- **JSON-RPC 2.0**, RBAC, rate limiting
+- **Production integrations:** ATS (Greenhouse, Lever), HRIS for demographics, calendar for interview scheduling
+
+### Phase 4 — HITL Feedback Loop
+
+- **Recruiter decisions** (ADVANCE / MAYBE / REJECT) → immutable JSONL
+- **Pattern analysis** → bounded weight adjustment (±0.10, re-normalised)
+- **Feedback is context, not training data** — avoiding the Amazon AI Hiring bias replication trap (2014–2018): we do not retrain on feedback; we adjust interpretable weights within bounds
+
+### Phase 5 — Compliance & Audit
+
+- **EU AI Act (Article 6, Annex III):** immutable `AuditRecord` per run — config hash, model version, reproducibility via temp=0
+- **NYC Local Law 144:** `impact_ratio` per demographic group; four-fifths rule flagging
+- **Cost tracking:** per-call token accounting (`extras/cost_tracker.py`)
+- **Append-only audit logs** in `data/feedback/audit_logs/`
+
+### Phase 6 — Scale
+
+- **Vector DB:** Milvus or Qdrant (replace numpy)
+- **Job queue:** Celery + Redis durable tasks
+- **Storage:** PostgreSQL, S3
+- **Progress:** SSE for real-time updates
+- **Deployment:** horizontal auto-scaling
 
 ---
 
@@ -369,6 +444,7 @@ pip install -r requirements.txt
 | Variable | Notes |
 |----------|-------|
 | `OPENAI_API_KEY` | **Required for LLM scoring.** Set via `.env` or `export`. Without it, deterministic fallback runs. |
+| `CE_TOP_PERCENT` | % of RRF pool through real CE (0–100, default 50). Rest get RRF-derived logit. |
 | `SECRET_KEY` | Django secret (required in production) |
 | `DEBUG` | Set `False` in production |
 
@@ -481,4 +557,15 @@ resume_matcher/
 
 ---
 
-*Built as a take-home POC for AI Solutions — Technical Lead review.*
+## References
+
+1. **Harvard Business School & Accenture**, “Hidden Workers: Untapped Talent” — 27M excluded by ATS.
+2. **Cormack et al. (2009)**, “Reciprocal Rank Fusion outperforms Condorcet” — RRF (k=60).
+3. **Zheng et al. (2023)**, “Judging LLM-as-a-Judge” — position and verbosity biases; motivation for structured two-stage scoring.
+4. **BEIR Benchmark (NeurIPS 2021)** — dense vs sparse retrieval trade-offs.
+5. **EU AI Act, Article 6, Annex III** — high-risk employment AI; immutable audit, reproducibility.
+6. **NYC Local Law 144** — AEDT bias audit, four-fifths rule.
+7. **ESCO v1.2.1** — 13,485 skills, 28 languages; skill ontology.
+8. **O\*NET** — occupational skill importance weights.
+9. **Lightcast Open Skills** — 32K skills from labor market data; emerging skill coverage.
+10. **Amazon AI Hiring (2014–2018)** — bias replication; motivation for feedback-as-context design (Phase 4).
