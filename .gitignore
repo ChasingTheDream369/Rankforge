@@ -57,6 +57,10 @@ celerybeat.pid
 score_ablation_resumes.py
 data/ablation_resumes/
 
+# ── Data & evaluation (do not track new files) ────────────────────────────────
+data/
+evaluation/
+
 # ── Data & indexes (generated/runtime) ───────────────────────────────────────
 data/index/documents.json
 data/index/index_meta.json
