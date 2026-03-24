@@ -1,10 +1,4 @@
-# Resume-JD Matching Engine — AI-Powered Talent Screening POC
-
-**Take-Home Assignment: Client Presentation**
-
-An AI-powered resume screening system built as a proof-of-concept (POC) for enterprise Talent Acquisition. The core proposition is **explainable scoring** — every resume receives a 0–1 relevance score broken into four interpretable dimensions (plus CE blend), each traceable to specific evidence. **Next calibration step:** learn the best **ordering of signals and their weights** (D1–D4, CE blend, retrieval fusion) through a **combined regression / grid search** on golden labels plus adversarial and ablation suites — see [Future Steps](#future-steps--production-roadmap).
-
----
+# RankForge
 
 ## Table of Contents
 
@@ -15,7 +9,7 @@ An AI-powered resume screening system built as a proof-of-concept (POC) for ente
 5. [Performance Evaluation](#performance-evaluation)
 6. [Challenges Overcome & Solutions](#challenges-overcome--solutions)
 7. [Future Steps & Production Roadmap](#future-steps--production-roadmap)
-8. [Setup & Usage](#setup--usage) — [UI walkthrough & screenshots](#web-ui-walkthrough-rankforge--resume-matcher-screenshots)
+8. [Setup & Usage](#setup--usage) — [UI walkthrough & screenshots](#web-ui-walkthrough--rankforge-screenshots)
 9. [Testing](#testing)
 10. [Project Structure](#project-structure)
 11. [Known Limitations](#known-limitations)
@@ -27,33 +21,46 @@ An AI-powered resume screening system built as a proof-of-concept (POC) for ente
 
 ## Overview
 
-### Scenario
+### Background
 
-The Talent Acquisition team struggles with manual resume screening: it is **slow**, **inconsistent**, and likely **overlooks qualified candidates**. This POC demonstrates an automated system that scores and ranks resumes based on their relevance to a specific job description.
+Resume and JD matching sits at the intersection of **information retrieval**, **structured scoring**, and **fairness**: keyword-only filters and opaque rankers routinely mis-rank or exclude people; regulators increasingly expect **auditability** for automated employment tools. RankForge is an open codebase to explore **explainable** matching—scores you can trace to evidence and dimensions—not a black-box relevance label.
 
-### Audience
+### Problem
 
-This work is presented to the **Technical Lead of the AI Solutions team**, who cares about:
+Manual review **does not scale** with applicant volume. Fully automated pipelines without structure drift toward **unpredictable** judgments and **weak audit trails**. The core problem this repo tackles is: **rank candidates against a JD with explicit, inspectable reasons**, not only a single scalar “match score.”
 
-- **Technical approach and reasoning** — why we chose this design
-- **Performance and limitations** — how well it works and where it falls short
-- **Code quality and reproducibility** — clear, runnable, maintainable
-- **Path to production** — what it takes to deploy at scale
+### Issues
 
-### Core Deliverable
+Several tensions show up in practice:
 
-A **Python-based matching engine** that:
+- **Consistency** — different reviewers (or runs) should not wildly disagree on the same resume–JD pair when evidence is stable.
+- **Gaming & noise** — injected prompts, hidden text, keyword stuffing, and non-resume documents need **detection and penalties**, not silent boosts.
+- **Retrieval vs understanding** — lexical-only methods miss semantics; semantic-only methods miss exact tokens; a **hybrid** path with re-ranking is needed.
+- **Explainability vs cost** — deep models help relevance but **structured dimensions** (skills, seniority, domain, constraints) keep scores legible for review and tuning.
+- **Calibration** — weights and fusion knobs should eventually be **fit to labeled data**, not only hand-tuned (see [Future Steps](#future-steps--production-roadmap)).
 
-- **Input:** Job description + set of resumes (PDF, DOCX, image, LaTeX, plain text, ZIP)
-- **Output:** Relevance score (0.0–1.0) per resume, plus per-dimension breakdowns, evidence, strengths, gaps, and confidence
+### Solution
 
-### What the System Does
+**RankForge** implements a **Python-first matching engine** plus a small Django web app for runs and tooling. Each candidate receives a **0–1** score built from **four interpretable dimensions (D1–D4)** blended with a **cross-encoder** signal, with **evidence** where the pipeline exposes it.
 
-1. **Extracts and sanitizes** each resume against adversarial manipulation
-2. **Retrieves** candidates using hybrid BM25 + semantic search, fused via Reciprocal Rank Fusion (RRF)
-3. **Re-ranks** the shortlist with a cross-encoder
-4. **Scores** each candidate on four structured dimensions using an LLM-as-Judge
-5. **Returns** a ranked list with per-dimension scores, evidence quotes, strengths, gaps, and confidence
+**Inputs:** job description + resumes (PDF, DOCX, image, LaTeX, plain text, ZIP).  
+**Outputs:** ranked list with per-dimension breakdowns, strengths/gaps where available, confidence, and threat/sanitizer flags.
+
+**Pipeline in short:**
+
+1. **Ingest & sanitize** — extract text; run adversarial detectors; optional non-resume gate.
+2. **Retrieve** — BM25 + dense embeddings, fused with **RRF**; shortlist for deeper scoring.
+3. **Re-rank** — cross-encoder on a top fraction of the pool.
+4. **Score** — structured D1–D4 (ontology- and tool-grounded where configured) plus narrative layer where LLMs are enabled.
+5. **Return** — ranked table and per-candidate detail for inspection.
+
+### Taking ahead
+
+The **next wave** is principled **calibration**: joint tuning of dimension weights, CE blend, and retrieval hyperparameters on **golden + adversarial** suites, plus production hardening (queueing, storage, rate limits, compliance hooks)—spelled out under [Future Steps & Production Roadmap](#future-steps--production-roadmap). Literature notes and doc links live under [Research alignment & literature notes](#research-alignment).
+
+### Context (architecture & narrative)
+
+For a **readable walkthrough** of the design (figures, layers, and rationale), see **[Architecture_Document.pdf](Architecture_Document.pdf)** in the repo root. The LaTeX source is [`docs/architecture.tex`](docs/architecture.tex) if you want to rebuild or cite sections. Screens from the web UI are under [`docs/rankforge_screens/`](docs/rankforge_screens/).
 
 ---
 
@@ -355,7 +362,7 @@ Label keys must match file stems exactly (case-sensitive). The ablation script a
 
 † **TOP-1** in the UI is the **model score at rank 1** after that approach (how sharp the list head is), not “accuracy@1” vs gold.
 
-**Reading this run:** On this JD, **retrieval-heavy stages** (notably BM25 + dense + RRF) can win **early-cutoff** metrics (e.g. nDCG@3, MRR, P@3) while **reordering the shortlist**; the **full stack** then trades some of that head metric for **better graded ordering through the top 10** and stronger **Spearman ρ**. **Stage 5 achieves the best nDCG@10 and Spearman here**, which is what we emphasize for product narrative. **Dimension weights, CE blend, RRF *k*, and pool cut** are still deliberately conservative and are **planned for joint tuning** on golden labels (see [Future Steps](#future-steps--production-roadmap))—this snapshot is meant to show the **intended direction**: ontology + structured scoring **recovering list quality** where it matters for shortlist review, not that every column is simultaneously maximal.
+**Reading this run:** On this JD, **retrieval-heavy stages** (notably BM25 + dense + RRF) can win **early-cutoff** metrics (e.g. nDCG@3, MRR, P@3) while **reordering the shortlist**; the **full stack** then trades some of that head metric for **better graded ordering through the top 10** and stronger **Spearman ρ**. **Stage 5 achieves the best nDCG@10 and Spearman here**, which is what we emphasize when discussing ranking quality on this benchmark. **Dimension weights, CE blend, RRF *k*, and pool cut** are still deliberately conservative and are **planned for joint tuning** on golden labels (see [Future Steps](#future-steps--production-roadmap))—this snapshot is meant to show the **intended direction**: ontology + structured scoring **recovering list quality** where it matters for shortlist review, not that every column is simultaneously maximal.
 
 **Why nDCG@10 is primary here (and not MRR / P@k alone):** As in the architecture write-up (`docs/architecture.tex`), **nDCG** uses **graded** relevance (e.g. 1.0 / 0.5 / 0.0) and a **logarithmic position discount**: pushing a strong candidate down to rank 10 hurts more than pushing them to rank 2. That matches **how TA uses a ranked shortlist**—several slots get eyeballs, not only position 1. **MRR** is dominated by the **first** relevant hit, so it can look excellent or poor when a single rank moves, even if the **rest of the top 10** improved. **P@k** treats relevance as **binary within k** and ignores **how much** better one “good” resume is than another, so it can disagree with nDCG when labels are graded. **Spearman ρ** is a useful **global** ordering check but is **noisier on small labeled pools**; **nDCG@10** stays tied to the **decision-critical head** of the list. We still report MRR, P@k, and Spearman as **secondary** diagnostics, not as competing “headline” goals.
 
@@ -527,9 +534,11 @@ Since this is just localhost and not deplpyed yet, so labelling that here once d
 
 Processing runs in a background subprocess (`manage.py process_run <id>`); the run-detail page auto-polls for progress and streams partial results.
 
-#### Web UI walkthrough (RankForge / Resume Matcher screenshots)
+<a id="web-ui-walkthrough--rankforge-screenshots"></a>
 
-The following matches what the Django app shows end-to-end. **Curated images** live under `docs/rankforge_screens/` as descriptive kebab-case `.png` names (dashboard, new-run flows, pipeline, test suite, terminals, roadmap, run/candidate views, ablation) so paths read clearly in docs and diffs.
+#### Web UI walkthrough — RankForge screenshots
+
+The following matches what the Django app (**Resume Matcher**) shows end-to-end. **Curated images** live under `docs/rankforge_screens/` as descriptive kebab-case `.png` names (dashboard, new-run flows, pipeline, test suite, terminals, roadmap, run/candidate views, ablation) so paths read clearly in docs and diffs.
 
 **Shell layout** — Left nav: **Dashboard**, **New Run**, then **ENGINE** → **Pipeline**, **Test Suite**, **Ablation**, **Roadmap**. Header: dark mode, user, logout.
 
@@ -752,7 +761,7 @@ resume_matcher/
 
 ## Known Limitations
 
-**Weights and retrieval hyperparameters are hand-tuned for the POC.** A **combined regression** on golden + adversarial data (see [Future Steps](#future-steps--production-roadmap)) will replace one-off tuning and better align metrics with recruiter judgment.
+**Weights and retrieval hyperparameters are hand-tuned in the current baseline.** A **combined regression** on golden + adversarial data (see [Future Steps](#future-steps--production-roadmap)) is planned to replace one-off tuning and better align metrics with human labels.
 
 | Limitation | Current State |
 |------------|---------------|
@@ -814,15 +823,15 @@ For **which tools** assisted research vs coding vs the web app, see [Acknowledge
 
 ## Acknowledgements
 
-Transparent credit for AI-assisted research and engineering (aligned with the architecture document and presentation materials):
+Transparent credit for AI-assisted research and engineering (aligned with `docs/architecture.tex` and project documentation):
 
 | Role | Tool / source |
 |------|----------------|
 | **Reasoning & coding / algorithmic ground** | **Anthropic Claude 4.6 Opus** — primary assistant for implementation logic, structure, and problem-solving. |
 | **Initial background & literature review** | **Google Gemini 3.1** (research-oriented workflows) — early framing and survey of the problem space. Working notes and links: [Literature review & working notes (author)](#literature-review-notes). |
 | **Web app — ideation, planning, implementation** | **Cursor** (Composer) — fast iteration in a stack already familiar to the author: **Django**, **jQuery**, **Tailwind CSS**, vanilla JavaScript, background threading, and lightweight async processing for match runs. |
-| **Architecture & deck copy** | **Claude** again used to summarize and tighten prose from the author’s bullets for the architecture write-up and slides. |
+| **Architecture & docs** | **Claude** again used to summarize and tighten prose from the author’s bullets for the architecture write-up and technical summaries. |
 
-**On repo norms:** There is no single mandatory GitHub standard for listing AI collaborators. A dedicated **Acknowledgements** section in the README (as here), plus matching notes in `docs/architecture.tex` and any slide deck, is a common and transparent pattern. Optional extras some projects use: a short `ACKNOWLEDGEMENTS.md`, `CITATION.cff` for formal citation, or author fields in `pyproject.toml` / paper-style `CITATION.bib` — use whatever your course or employer expects.
+**On repo norms:** There is no single mandatory GitHub standard for listing AI collaborators. A dedicated **Acknowledgements** section in the README (as here), plus matching notes in `docs/architecture.tex` or other docs you ship alongside the repo, is a common and transparent pattern. Optional extras some projects use: `ACKNOWLEDGEMENTS.md`, `CITATION.cff`, or author metadata in `pyproject.toml` / `CITATION.bib` — pick what fits your project.
 
-The product **scoring** path in code uses **OpenAI** models where configured (`gpt-4o-mini` / `gpt-4o`, embeddings); that runtime dependency is separate from the **authoring** assistants named above.
+The **runtime scoring** path in code uses **OpenAI** models where configured (`gpt-4o-mini` / `gpt-4o`, embeddings); that dependency is separate from the **authoring** assistants named above.
