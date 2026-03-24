@@ -5,17 +5,10 @@
 1. [Overview](#overview)
 2. [Technical Approach & Justification](#technical-approach--justification)
 3. [Architecture](#architecture)
-4. [Feature Engineering & Data Preprocessing](#feature-engineering--data-preprocessing)
-5. [Performance Evaluation](#performance-evaluation)
-6. [Challenges Overcome & Solutions](#challenges-overcome--solutions)
-7. [Future Steps & Production Roadmap](#future-steps--production-roadmap)
-8. [Setup & Usage](#setup--usage) — [UI walkthrough & screenshots](#web-ui-walkthrough--rankforge-screenshots)
-9. [Testing](#testing)
-10. [Project Structure](#project-structure)
-11. [Known Limitations](#known-limitations)
-12. [Research alignment & literature notes](#research-alignment)
-13. [References](#references)
-14. [Acknowledgements](#acknowledgements)
+4. [Setup & Usage](#setup--usage) — [Web UI walkthrough & screenshots](#web-ui-walkthrough--rankforge-screenshots)
+5. [Testing](#testing)
+6. [Project Structure](#project-structure)
+7. [**Extended reference** →](docs/reference.md) benchmarks, roadmap, limitations, research, citations
 
 ---
 
@@ -37,7 +30,7 @@ Several tensions show up in practice:
 - **Gaming & noise** — injected prompts, hidden text, keyword stuffing, and non-resume documents need **detection and penalties**, not silent boosts.
 - **Retrieval vs understanding** — lexical-only methods miss semantics; semantic-only methods miss exact tokens; a **hybrid** path with re-ranking is needed.
 - **Explainability vs cost** — deep models help relevance but **structured dimensions** (skills, seniority, domain, constraints) keep scores legible for review and tuning.
-- **Calibration** — weights and fusion knobs should eventually be **fit to labeled data**, not only hand-tuned (see [Future Steps](#future-steps--production-roadmap)).
+- **Calibration** — weights and fusion knobs should eventually be **fit to labeled data**, not only hand-tuned (see [Future Steps](docs/reference.md#future-steps--production-roadmap)).
 
 ### Solution
 
@@ -56,7 +49,7 @@ Several tensions show up in practice:
 
 ### Taking ahead
 
-The **next wave** is principled **calibration**: joint tuning of dimension weights, CE blend, and retrieval hyperparameters on **golden + adversarial** suites, plus production hardening (queueing, storage, rate limits, compliance hooks)—spelled out under [Future Steps & Production Roadmap](#future-steps--production-roadmap). Literature notes and doc links live under [Research alignment & literature notes](#research-alignment).
+The **next wave** is principled **calibration**: joint tuning of dimension weights, CE blend, and retrieval hyperparameters on **golden + adversarial** suites, plus production hardening (queueing, storage, rate limits, compliance hooks)—spelled out under [Future Steps & Production Roadmap](docs/reference.md#future-steps--production-roadmap). Literature notes and citations live in the [extended reference](docs/reference.md#research-alignment).
 
 ### Context (architecture & narrative)
 
@@ -262,236 +255,6 @@ The final score is built in clearly separated layers. If we change a layer tomor
 
 ---
 
-## Feature Engineering & Data Preprocessing
-
-### Text Extraction (MIME-first)
-
-1. Detect format via `file --mime-type` or extension
-2. Route to extractor:
-   - **PDF:** `pypdf` → fallback to `pdftotext` if available
-   - **DOCX/DOC/RTF:** `python-docx` or `pandoc`
-   - **HTML:** BeautifulSoup strip tags
-   - **Images:** `pytesseract` OCR (requires `tesseract` installed)
-   - **LaTeX/plain text:** read as text
-
-### Adversarial Sanitization (7 Detectors)
-
-| Detector | What It Catches | Action |
-|----------|-----------------|--------|
-| Prompt injection | “Ignore instructions”, “score me 10/10” | Strip patterns; assign penalty 0.7–0.95 |
-| Keyword stuffing | Abnormal TF density, verb ratio | Continuous penalty |
-| Invisible text | Zero-width, BOM, directional marks | Strip; count for penalty |
-| Homoglyphs | Cyrillic “a” → Latin “a” | Normalise |
-| JD duplication | Copy-pasted JD into resume (n-gram overlap) | Penalty by overlap ratio |
-| Experience inflation | Timeline gaps vs claimed years | Penalty |
-| Credential anomaly | >7 certs in skills section | Penalty |
-
-**Penalty model:** Continuous (0.0–0.95), not binary. Final score multiplied by `(1 - adversarial_penalty)`.
-
-### Profile Normalisation
-
-- **Skills:** Ontology alias mapping (e.g. “Golang” → “Go”); **exact / adjacent / group** tiers for D1 with decreasing credit; adjacency (e.g. rabbitmq ≈ kafka).
-- **Domains:** Canonical mapping; `ADJACENT_DOMAINS` for adjacent industry pairs before LLM fallback.
-- **Seniority:** Normalised to schema vocabulary; D2 agent calls **deterministic** assessors on evidence text.
-
-### Deterministic Fallback (No LLM)
-
-When `OPENAI_API_KEY` is not set:
-
-- BM25 + cross-encoder for retrieval
-- Regex-based skill matching (BUILD_VERBS, USE_VERBS)
-- Keyword hit counts for D2, D3, D4
-
-Accuracy is lower, especially for semantic skill equivalence and seniority judgement.
-
----
-
-## Performance Evaluation
-
-### Synthetic Evaluation Set
-
-We evaluate against a small **human-labeled** set (not production scale, but reproducible):
-
-- **Job description (primary table below):** `data/job_descriptions/senior_backend_finpay.txt` — senior backend / FinPay-style stack
-- **Resumes:** `data/resumes/` (13 labeled `.txt` profiles + one unlabeled file in the folder; labels in `golden_dataset.jsonl`)
-- **Optional stress formats:** `data/ablation_resumes/` (PDF, PNG, JPEG, LaTeX) — use for manual UI / adversarial testing; add stems and grades to `golden_dataset.jsonl` when you want them in `ablation.py`
-- **Labels:** `data/golden_dataset.jsonl` — per JD, keyed by resume **file stem**:
-  - **1.0** = Good Match
-  - **0.5** = Partial Match
-  - **0.0** = Poor Match
-
-### Adding Golden Labels
-
-Edit `data/golden_dataset.jsonl` and add (or extend) an entry:
-
-```json
-{
-  "your_jd_id": {
-    "resume_id_1": 1.0,
-    "resume_id_2": 0.5,
-    "resume_id_3": 0.0
-  }
-}
-```
-
-Label keys must match file stems exactly (case-sensitive). The ablation script auto-selects the JD with the most labeled resumes.
-
-### Evaluation Metrics
-
-| Metric | What It Measures |
-|--------|-------------------|
-| **nDCG@k** | Quality of top-k ranking; position-weighted, graded relevance |
-| **MRR** | How quickly the first relevant result appears |
-| **Precision@k** | Fraction of top-k that are relevant (≥0.5) |
-| **Spearman ρ** | Rank correlation between predicted and gold ordering |
-| **Impact Ratio** | NYC LL144 bias audit — selection rate per group / max rate |
-
-<a id="ablation-latest-ema-mar-2026"></a>
-
-### Latest ablation — real resume dataset (25 March 2026)
-
-**Setup:** Labeled **real resumes** from the project corpus, JD key **`ema_enterprise_swe`** in `data/golden_dataset.jsonl`, run through the **current** RankForge **Ablation** ladder (same five steps as the UI: sparse baselines → hybrid RRF → cross-encoder → **full pipeline** with profile extraction, curated **ontology-grounded** D1/D3 tiers, D2 agent/tools when enabled, merged D1–D4, and agentic verification on LOW confidence). This table is the **most recent recorded snapshot** for that configuration.
-
-| Approach | nDCG@3 | nDCG@5 | nDCG@10 | MRR | P@3 | P@5 | Spearman ρ | TOP-1† |
-|----------|-------:|-------:|--------:|----:|----:|----:|-----------:|-------:|
-| TF-IDF only | 0.229 | 0.471 | 0.667 | 0.250 | 0.000 | 0.200 | 0.304 | 0.093 |
-| TF-IDF + BM25 | 0.436 | 0.480 | 0.584 | 0.500 | 0.333 | 0.200 | 0.214 | 0.032 |
-| BM25 + Dense + RRF | 0.738 | 0.726 | 0.712 | 0.333 | 0.333 | 0.400 | 0.329 | 0.032 |
-| + Cross-encoder | 0.304 | 0.444 | 0.643 | 0.200 | 0.000 | 0.200 | 0.389 | 0.158 |
-| Hybrid + Agentic (Ontology Grounding) | 0.498 | 0.690 | **0.786** | 0.250 | 0.000 | 0.400 | **0.454** | **0.720** |
-
-† **TOP-1** in the UI is the **model score at rank 1** after that approach (how sharp the list head is), not “accuracy@1” vs gold.
-
-**Reading this run:** On this JD, **retrieval-heavy stages** (notably BM25 + dense + RRF) can win **early-cutoff** metrics (e.g. nDCG@3, MRR, P@3) while **reordering the shortlist**; the **full stack** then trades some of that head metric for **better graded ordering through the top 10** and stronger **Spearman ρ**. **Stage 5 achieves the best nDCG@10 and Spearman here**, which is what we emphasize when discussing ranking quality on this benchmark. **Dimension weights, CE blend, RRF *k*, and pool cut** are still deliberately conservative and are **planned for joint tuning** on golden labels (see [Future Steps](#future-steps--production-roadmap))—this snapshot is meant to show the **intended direction**: ontology + structured scoring **recovering list quality** where it matters for shortlist review, not that every column is simultaneously maximal.
-
-**Why nDCG@10 is primary here (and not MRR / P@k alone):** As in the architecture write-up (`docs/architecture.tex`), **nDCG** uses **graded** relevance (e.g. 1.0 / 0.5 / 0.0) and a **logarithmic position discount**: pushing a strong candidate down to rank 10 hurts more than pushing them to rank 2. That matches **how TA uses a ranked shortlist**—several slots get eyeballs, not only position 1. **MRR** is dominated by the **first** relevant hit, so it can look excellent or poor when a single rank moves, even if the **rest of the top 10** improved. **P@k** treats relevance as **binary within k** and ignores **how much** better one “good” resume is than another, so it can disagree with nDCG when labels are graded. **Spearman ρ** is a useful **global** ordering check but is **noisier on small labeled pools**; **nDCG@10** stays tied to the **decision-critical head** of the list. We still report MRR, P@k, and Spearman as **secondary** diagnostics, not as competing “headline” goals.
-
-### Ablation study — five levels (FinPay JD, labeled `data/resumes/`)
-
-`ablation.py` scores the same pool with **five stacked approaches**: (1) TF-IDF only → (2) TF-IDF + BM25 (RRF) → (3) BM25 + bi-encoder (RRF) → (4) + cross-encoder rerank → (5) **full pipeline** (hybrid retrieval + CE + ontology / 4D scoring as in `src/pipeline.py`). Metrics are vs `senior_backend_finpay` in `golden_dataset.jsonl`. For the **most recent real-resume snapshot** (`ema_enterprise_swe`, 25 March 2026), see [Latest ablation](#ablation-latest-ema-mar-2026) above.
-
-**Measured run** (regenerate anytime; committed snapshot: `evaluation/ablation_results.json`):
-
-| Level | Approach | nDCG@3 | nDCG@5 | nDCG@10 | MRR | P@3 | P@5 | Spearman ρ |
-|------:|----------|-------:|-------:|--------:|----:|----:|----:|-----------:|
-| 1 | TF-IDF cosine only | 1.000 | 0.915 | 0.974 | 1.000 | 1.000 | 0.800 | 0.558 |
-| 2 | TF-IDF + BM25 (RRF) | 1.000 | 0.915 | 0.974 | 1.000 | 1.000 | 0.800 | 0.637 |
-| 3 | BM25 + bi-encoder (RRF) | 1.000 | 0.915 | **0.976** | 1.000 | 1.000 | 0.800 | **0.681** |
-| 4 | + Cross-encoder rerank | 0.765 | 0.727 | 0.856 | 1.000 | 0.667 | 0.600 | 0.267 |
-| 5 | + Full system (ontology / 4D) | 0.765 | 0.727 | **0.922** | 1.000 | 0.667 | 0.600 | 0.563 |
-
-**How to read this (important for reviewers):**
-
-- **Stages 1 → 3 — consistent retrieval improvement:** On this FinPay JD, keyword overlap is strong enough that the top three gold “good” candidates already appear at the top under raw TF-IDF, so **nDCG@3 stays saturated at 1.0**. The real progression shows up in **Spearman ρ** (0.558 → 0.637 → **0.681**): hybrid BM25 + dense **better matches the full gold ordering** across all 13 labeled resumes, not just the head of the list.
-- **Stage 4 — cross-encoder:** Reranking optimizes pairwise [JD, resume] relevance; on a **tiny** labeled set, reordering can **lower** graded metrics (nDCG@3/5/10, P@k) even while MRR stays high — a known small-sample effect, not a claim that CE is worse in production.
-- **Stage 5 — full stack vs stage 4:** The complete pipeline **recovers list quality vs CE-only**: **nDCG@10 0.856 → 0.922** and **Spearman 0.267 → 0.563**, while adding **explainable D1–D4 scores, ontology grounding, and adversarial handling** (not visible in this table). That is the intended “improvement applied” for the productized matcher vs retrieval-only baselines.
-
-**Reproduce (FinPay, default golden labels):**
-
-```bash
-python ablation.py --jd data/job_descriptions/senior_backend_finpay.txt --resumes data/resumes/
-# writes evaluation/ablation_results.json
-```
-
-**Your own resumes:** add a block to `data/golden_dataset.jsonl` (JD stem → `{ "your_file_stem": 1.0, ... }`), then point `--resumes` at a folder of those files and re-run the same command.
-
-### Running Evaluation
-
-```bash
-# Ablation: default uses only data/ablation_resumes/ when that folder has files (fast UI-sized run);
-# picks JD in golden_dataset with best label overlap on those stems. Use --jd/--resumes for FinPay table.
-python ablation.py
-
-# FinPay + labeled txt corpus (recommended for the table above)
-python ablation.py --jd data/job_descriptions/senior_backend_finpay.txt --resumes data/resumes/
-
-# Custom JD and resumes (requires matching keys in golden_dataset.jsonl)
-python ablation.py --jd my_jd.txt --resumes ./my_resumes/
-
-# Demo: full pipeline on a folder
-python demo.py --jd data/job_descriptions/senior_backend_finpay.txt \
-               --resumes data/ablation_resumes/
-```
-
-### Formal Evaluation with Larger Labeled Data
-
-If a larger, labeled dataset were available, we would:
-
-1. **Primary metric:** **nDCG@10** — captures graded relevance and positional quality
-2. **Secondary:** **Precision@5** (recruiter typically reviews top 5); **MRR** (how fast first good candidate appears)
-3. **Rank correlation:** **Spearman ρ** for overall ordering quality
-4. **Fairness:** **Impact ratio** per demographic proxy (NYC LL144 four-fifths rule)
-5. **Calibration:** Score separation (avg_good vs avg_partial vs avg_poor); gaps should be positive
-6. **A/B testing:** Compare ranking quality vs human recruiter baseline on same pool
-7. **Combined regression (planned):** Treat D1–D4 weights, CE weight, RRF *k*, and `CE_TOP_PERCENT` as a constrained parameter vector; optimize nDCG@k / Spearman on `golden_dataset.jsonl` + held-out adversarial cases (keyword stuffing, JD copy-paste, etc.) so ranking quality and robustness improve together rather than tuning one knob at a time
-
----
-
-## Challenges Overcome & Solutions
-
-| Challenge | Solution |
-|-----------|----------|
-| **Adversarial documents rank #1** (e.g. 70K academic paper with every keyword) | L0 sanitization + `is_resume` LLM gate; continuous penalty instead of binary reject; adversarial docs get high penalty and low/zero score |
-| **Semantic equivalence** (“payment APIs” vs “financial microservices”) | Dense bi-encoder retrieval; ontology adjacency (e.g. rabbitmq ≈ kafka); LLM profile extraction |
-| **Exact keyword missed by dense** | BM25 lexical retrieval; hybrid RRF fusion |
-| ** inflated language** (“used Python once” vs “led Python backend”) | Cross-encoder re-ranking on [JD, resume] pairs |
-| **Non-deterministic LLM outputs** | Two-stage: cheap extraction (cached) + temp=0 scoring; D1–D4 overwritten by deterministic modules (ontology, regex, agents) where possible |
-| **Skills not in ontology** | D1/D3 LLM fallback (`D1_LLM_FALLBACK`, `D3_LLM_FALLBACK`) when exact/adjacent match fails |
-| **Seniority judgement** | D2 agent with deterministic tools on LLM quotes; regex/heuristics for leadership, architecture, scale, ownership |
-| **Explainability** | 4D scores; per-skill evidence (name, level, quote); strengths/gaps; threat flags |
-| **Cost at scale** | Profile cache (IndexStore); CE only on top 50% of RRF pool; optional `cost_tracker` in extras |
-
----
-
-## Future Steps & Production Roadmap
-
-**Calibration priority.** The submission build keeps the **base scorer stable** (same formulas and evidence paths). The next improvement pass is to **discover weights and ordering of signals jointly**: dimension weights (D1–D4), CE blend α, retrieval fusion (RRF *k*, CE pool cut), and optional score floors/caps — fitted with **combined regression or constrained grid search** on golden labels, ablation JSON, and adversarial uploads so nDCG / Spearman and “gaming resistance” move together. Other high-value items: wire `cost_tracker` to per-run DB totals, expand few-shot banks per industry, richer confidence calibration (skill evidence + CE–dim divergence), and optional demographic-aware fairness dashboards (impact ratio already implemented; threshold is configurable — see env table).
-
-### Phase 1 — Demo-Ready
-
-- **Combined regression / grid search** — Joint optimization of D1–D4 weights, CE weight, and key retrieval hyperparameters against `golden_dataset.jsonl` + adversarial suite; primary objective nDCG@10 / Spearman, secondary robustness on ablation resumes
-- **Surface full profiles in UI** — Optional collapsible `jd_profile` / `resume_profile` JSON for auditors (skill table already shown when populated)
-- **Confidence calibration** — Tune thresholds on BUILT_WITH vs ABSENT ratios and CE vs `dim_composite` divergence beyond current heuristics
-- **Cost visibility** — Persist `extras/cost_tracker.py` aggregates per `MatchRun` for stakeholder “cost per resume” answers
-
-**Already in this codebase (not blocking submission):** JD seniority–based dimension presets (`ROLE_WEIGHTS`), optional **custom dimension importance** on New Run (normalized, stored in `MatchRun.scoring_config`), domain-selected few-shot bank (FinTech vs AI/ML), applied weights surfaced on candidate detail, agentic LOW-confidence re-score, 7-detector adversarial penalty model.
-
-### Phase 2 — Knowledge Graph & Skill Intelligence
-
-- **ESCO (13,485 skills, 1.3M co-occurrence edges):** canonical skill resolution + adjacency + graph expansion; ontology as source of truth for exact/adjacent/group matching
-- **O\*NET crosswalk:** importance weights per skill per occupation (e.g. Python = 5/5 for Backend Engineer, 1/5 for Marketing Manager)
-- **Lightcast Open Skills (32K skills, biweekly updates):** captures emerging skills ESCO/O\*NET lag on (“agentic workflows”, “prompt engineering”)
-- **KG as translation layer** between LLM reasoning and deterministic grounding — LLM outputs normalised via KG before D1–D4 computation
-
-### Phase 3 — MCP Integration
-
-- **MCP server** (`extras/mcp_server.py`) with 9 tools: `match`, `score`, `explain`, `audit`, `feedback`, etc.
-- **JSON-RPC 2.0**, RBAC, rate limiting
-- **Production integrations:** ATS (Greenhouse, Lever), HRIS for demographics, calendar for interview scheduling
-
-### Phase 4 — HITL Feedback Loop
-
-- **Recruiter decisions** (ADVANCE / MAYBE / REJECT) → immutable JSONL
-- **Pattern analysis** → bounded weight adjustment (±0.10, re-normalised)
-- **Feedback is context, not training data** — avoiding the Amazon AI Hiring bias replication trap (2014–2018): we do not retrain on feedback; we adjust interpretable weights within bounds
-
-### Phase 5 — Compliance & Audit
-
-- **EU AI Act (Article 6, Annex III):** immutable `AuditRecord` per run — config hash, model version, reproducibility via temp=0
-- **NYC Local Law 144:** `impact_ratio` per demographic group; four-fifths rule flagging (`extras/compliance.py`; override threshold with `FAIRNESS_FOUR_FIFTHS_THRESHOLD` if needed)
-- **Cost tracking:** per-call token accounting (`extras/cost_tracker.py`)
-- **Append-only audit logs** in `data/feedback/audit_logs/`
-
-### Phase 6 — Scale
-
-- **Vector DB:** Milvus or Qdrant (replace numpy)
-- **Job queue:** Celery + Redis durable tasks
-- **Storage:** PostgreSQL, S3
-- **Progress:** SSE for real-time updates
-- **Deployment:** horizontal auto-scaling
-
----
-
 ## Setup & Usage
 
 ### Prerequisites
@@ -520,7 +283,8 @@ cp .env.example .env          # then edit .env with your keys
 | `CE_TOP_PERCENT` | % of RRF pool through real CE (0–100, default 50). Rest get RRF-derived logit. |
 | `FAIRNESS_FOUR_FIFTHS_THRESHOLD` | (Optional) NYC LL144-style flag when group impact ratio falls below this value (default `0.8`). Used by `extras/compliance.py`. |
 
-**Security:** API keys must come from environment or `.env` only.  Added above while setting up if possible.
+**Security:** API keys must come from environment or `.env` only — never commit `.env`.
+
 ### Web UI
 
 ```bash
@@ -530,7 +294,7 @@ python manage.py seed_data          # optional: populate demo JD + resumes
 python manage.py runserver
 ```
 
-Since this is just localhost and not deplpyed yet, so labelling that here once deployed this will be replaced -> Visit `http://127.0.0.1:8000` — log in, go to **New Run**, paste JD, upload resumes (up to 50; ZIP supported). On *New Run* you can also select a **scoring mode** (Auto / LLM / Deterministic) and optionally set **custom dimension weights** (D1–D4 percentages).
+Visit `http://127.0.0.1:8000` — log in, go to **New Run**, paste JD, upload resumes (up to 50; ZIP supported). On *New Run* you can also select a **scoring mode** (Auto / LLM / Deterministic) and optionally set **custom dimension weights** (D1–D4 percentages).
 
 Processing runs in a background subprocess (`manage.py process_run <id>`); the run-detail page auto-polls for progress and streams partial results.
 
@@ -548,8 +312,8 @@ The following matches what the Django app (**Resume Matcher**) shows end-to-end.
 | **New Run** | JD **Title** + **Job Description**; **Resumes** drop zone (PDF, DOCX, PNG, LaTeX, ZIP — note in UI: optimized for PDF). **Settings**: scoring mode dropdown (**Auto** = LLM if API key else deterministic; **LLM**; **Deterministic**). **Scoring weight profile** chips: Auto-detect, Junior, Mid-level, Senior, Staff / Lead, Executive, **Custom** — each updates D1–D4 sliders. UI copy: percentages normalize to 100%; **final score blends 50% dimension composite with 50% cross-encoder** (same default as `CE_WEIGHT` in `src/config.py`). **Start Matching Run**. |
 | **Pipeline** (`/pipeline/`) | **L0** — ingestion (`TextExtractor`), ZIP in-memory, up to 50 resumes/run; adversarial **7-detector** sanitizer (injection, invisible text, homoglyphs, JD duplication, keyword density, font-size tricks, non-resume **LLM gate**); HIGH threat → zero score downstream. **L1** — BM25 + dense bi-encoder (OpenAI `text-embedding-3-small` vs local `all-MiniLM-L6-v2`), top-50 each, normalized scores. **L2** — RRF \(k=60\); top pool; **CE_TOP_PERCENT** controls how many get a real cross-encoder vs rank-derived logit (see [Retrieval Formulation](#retrieval-formulation-ce-top-50-rank-wise-full-coverage) above for the current code path). **L3** — cross-encoder re-rank. Second panel: **D1–D4** definitions (BUILT_WITH / USED / LISTED / ABSENT; D2 agent signals; D3 same/adjacent/unrelated; D4 constraints default 1.0 if none), **role-adaptive weight table** (Junior 50/25/15/10 through Executive 25/55/12/8), **final formula** \(\text{final} = (1-\alpha)\,\text{dim} + \alpha\,\sigma(\text{ce\_logit})\) with default \(\alpha=0.5\), LOW-confidence agentic retry + deterministic fallback, ESCO adjacency penalty (e.g. **0.7×** same-level neighbor), and **eval metrics** (nDCG@k, MRR, P@k, Spearman) with a pointer to **Ablation** for toggling stages. |
 | **Test Suite** (`/tests/`) | **Run All Tests**; grouped results mirror `tests/test_all.py` — ontology & skill overlap; injection / invisible / homoglyphs / JD duplication; full sanitize; sigmoid & skill-penalty & final score; recommendation bands; nDCG, MRR, precision, Spearman; bias audit; extractor formats (incl. `.tex`, image OCR smoke); resume gate; ablation dataset smoke; contracts. Typical run: **60+ passed**, a few skipped when optional conditions aren’t met. |
-| **Ablation** (`/ablation/`) | Same five-level study as `ablation.py` / [Performance Evaluation](#performance-evaluation); use the UI for quick iteration without the CLI. |
-| **Roadmap** (`/roadmap/`) | In-app cards expand on [Future Steps](#future-steps--production-roadmap): ESCO normalization + multi-hop graph + local RDF; **compliance** (PII redaction, per-dimension distributions, four-fifths flagging, signed audit store — starts from `extras/compliance.py`); **MCP** (`match_resumes`, `explain_score`, `update_label` — `extras/mcp_server.py`); **cost** caps & per-run token surfacing (`extras/cost_tracker.py`); **HITL** labels → `golden_dataset.jsonl` (`extras/feedback.py`); **parameter tuning** (α, role presets, few-shot verticals, RRF \(k\), `CE_TOP_PERCENT`); **infrastructure** — Celery + Redis instead of daemon threads, Postgres for multi-worker state, S3/object storage for files, `django-ratelimit` on high-traffic endpoints, SSE/WebSockets instead of polling-only UX. |
+| **Ablation** (`/ablation/`) | Same five-level study as `ablation.py` / [Performance Evaluation](docs/reference.md#performance-evaluation); use the UI for quick iteration without the CLI. |
+| **Roadmap** (`/roadmap/`) | In-app cards expand on [Future Steps](docs/reference.md#future-steps--production-roadmap): ESCO normalization + multi-hop graph + local RDF; **compliance** (PII redaction, per-dimension distributions, four-fifths flagging, signed audit store — starts from `extras/compliance.py`); **MCP** (`match_resumes`, `explain_score`, `update_label` — `extras/mcp_server.py`); **cost** caps & per-run token surfacing (`extras/cost_tracker.py`); **HITL** labels → `golden_dataset.jsonl` (`extras/feedback.py`); **parameter tuning** (α, role presets, few-shot verticals, RRF \(k\), `CE_TOP_PERCENT`); **infrastructure** — Celery + Redis instead of daemon threads, Postgres for multi-worker state, S3/object storage for files, `django-ratelimit` on high-traffic endpoints, SSE/WebSockets instead of polling-only UX. |
 
 **Run & candidate views** — Run header: job title, run id, resume count, timestamp; actions **Export CSV**, **Re-score**, status badge. **Ranked candidates** table: rank, label, **final score**, D1–D4, **confidence**, **recommendation** (e.g. Partial / No / Strong match), **threat**, **Preview** (PDF or text). **Candidate detail**: per-dimension cards with applied weights; breakdown row (**dimension composite**, **cross-encoder sigmoid** × weight, **final**); **LLM rationale**; **Strengths** / **Gaps**; **D1 skill evidence** rows (`exact`, `absent`, `group`, `adjacent`, `llm_fallback`); **D2** leadership / architecture / scale / ownership / years + narrative; **Retrieval stage** fields (BM25, dense, `CE_LOGIT`, JSON blobs for skills, seniority, domain). **Non-resume gate**: document rejected before scoring → **0.00** final score, LOW confidence, rationale in UI matches gate behaviour.
 
@@ -606,7 +370,7 @@ python demo.py
 python demo.py --jd data/job_descriptions/ai_engineer_ema.txt \
                --resumes data/ablation_resumes/
 
-# Ablation: 5-level metric table (FinPay JD + golden labels) — see Performance Evaluation
+# Ablation: 5-level metric table (FinPay JD + golden labels) — see [Performance Evaluation](docs/reference.md#performance-evaluation)
 python ablation.py --jd data/job_descriptions/senior_backend_finpay.txt --resumes data/resumes/
 
 # Tests
@@ -732,12 +496,13 @@ resume_matcher/
 │   └── index/                    Cached embeddings, BM25, profiles
 │
 ├── evaluation/
-│   ├── ablation_results.json     Snapshot from ablation.py (FinPay table in README)
+│   ├── ablation_results.json     Snapshot from ablation.py (FinPay table in docs/reference.md)
 │   └── ablation_scores.json      score_ablation_resumes.py D1–D4 dump
 │
 ├── docs/
 │   ├── architecture.tex          LaTeX architecture document
-│   └── Architecture_Document.pdf Compiled PDF
+│   ├── reference.md              Extended README (benchmarks, roadmap, refs)
+│   └── rankforge_screens/        UI screenshots for this README
 │
 ├── extras/
 │   ├── cost_tracker.py           Per-call token accounting
@@ -751,87 +516,13 @@ resume_matcher/
 ├── score_ablation_resumes.py     Score without retrieval (D1–D4 only)
 ├── tests/test_all.py             ~75 unit + integration tests
 ├── manage.py                     Django management entry point
+├── Architecture_Document.pdf     Compiled architecture (see also docs/architecture.tex)
 ├── requirements.txt
 ├── tailwind.config.js            Tailwind CSS build config
 ├── .env.example                  Template for environment variables
 └── logs/                         Worker logs (auto-created, gitignored)
 ```
 
----
-
-## Known Limitations
-
-**Weights and retrieval hyperparameters are hand-tuned in the current baseline.** A **combined regression** on golden + adversarial data (see [Future Steps](#future-steps--production-roadmap)) is planned to replace one-off tuning and better align metrics with human labels.
-
-| Limitation | Current State |
-|------------|---------------|
-| **Explainability** | D1 skill breakdown with evidence is populated when deterministic D1 runs on extracted profiles; strengths/gaps/rationale from Stage-2 LLM; D2–D4 collapsible sections when signal detail exists |
-| **Dimension weights** | Default 0.40/0.35/0.15/0.10; **JD seniority presets** (junior → staff); optional **custom % weights** per run on New Run |
-| **Few-shot examples** | FinTech and AI/ML banks; scorer selects by `jd_profile["domain"]` |
-| **Confidence** | LLM self-reported confidence plus downgrade when CE sigmoid diverges strongly from `dim_composite` |
-| **Retrieval in web UI** | Match pipeline runs hybrid retrieval + CE logit when `src.retrieval` is available; if the engine fails, falls back to `ce_logit=0` (4D-only blend) |
-| **Index implementation** | Dense index stored as numpy array (not FAISS); fine for <10K resumes |
-| **Scoring mode selector** | UI stores Auto / LLM / Deterministic on `MatchRun.scoring_mode`; worker currently auto-detects mode via `has_llm()` — explicit enforcement is planned |
-| **LLM provider** | OpenAI only; `llm_client.py` has no Anthropic path in current code |
-| **Cost accounting** | `extras/cost_tracker.py` exists; not yet persisted on `MatchRun` in the DB |
-| **Celery** | `celery.py` and `tasks.py` exist; current worker path uses `subprocess` + `manage.py process_run` — Celery wiring is ready for production deployment |
+**More documentation:** [docs/reference.md](docs/reference.md) — feature engineering, ablation benchmarks, roadmap, limitations, research notes, references, acknowledgements.
 
 ---
-
-## Research Alignment
-
-| Paper Component | Implementation |
-|-----------------|----------------|
-| Adversarial sanitization | `src/ingestion/sanitizer.py` — 7 detectors, continuous penalty |
-| BM25 lexical retrieval | `src/retrieval/engine.py` |
-| Dense bi-encoder | `all-MiniLM-L6-v2` or `text-embedding-3-small` |
-| RRF fusion | k=60, parameter-free |
-| Cross-encoder re-ranking | `ms-marco-MiniLM-L-6-v2` |
-| LLM-as-Judge | Two-stage, gpt-4o-mini + gpt-4o, temp=0 |
-| 4D scoring schema | D1 skills / D2 seniority / D3 domain / D4 constraints |
-| ESCO ontology (partial — to be extended later; included as a base for explainability) | `src/ingestion/ontology.py` |
-| Evaluation metrics | nDCG, MRR, P@k, Spearman, impact_ratio |
-| Agentic retry | 1 bounded re-score on LOW confidence |
-
-<a id="literature-review-notes"></a>
-
-### Literature review & working notes (author)
-
-Problem framing and literature survey for this project were developed across two working Google Docs (iterated in parallel; together they formed the hybrid basis for the design). **Primary links:**
-
-- [Literature / background notes (1)](https://docs.google.com/document/d/1q2nIq1jjj6TZWj34VNzcHCo-4lkws7abH68tE6d485Q/edit?usp=sharing)
-- [Literature / background notes (2)](https://docs.google.com/document/d/1eIZ9NAsMdAaO7I4zIptqpkLbZVVAf5BWZ6XVRTC2KBU/edit?usp=sharing)
-
-For **which tools** assisted research vs coding vs the web app, see [Acknowledgements](#acknowledgements).
-
----
-
-## References
-
-1. **Harvard Business School & Accenture**, “Hidden Workers: Untapped Talent” — 27M excluded by ATS.
-2. **Cormack et al. (2009)**, “Reciprocal Rank Fusion outperforms Condorcet” — RRF (k=60).
-3. **Zheng et al. (2023)**, “Judging LLM-as-a-Judge” — position and verbosity biases; motivation for structured two-stage scoring.
-4. **BEIR Benchmark (NeurIPS 2021)** — dense vs sparse retrieval trade-offs.
-5. **EU AI Act, Article 6, Annex III** — high-risk employment AI; immutable audit, reproducibility.
-6. **NYC Local Law 144** — AEDT bias audit, four-fifths rule.
-7. **ESCO v1.2.1** — 13,485 skills, 28 languages; skill ontology.
-8. **O\*NET** — occupational skill importance weights.
-9. **Lightcast Open Skills** — 32K skills from labor market data; emerging skill coverage.
-10. **Amazon AI Hiring (2014–2018)** — bias replication; motivation for feedback-as-context design (Phase 4).
-
----
-
-## Acknowledgements
-
-Transparent credit for AI-assisted research and engineering (aligned with `docs/architecture.tex` and project documentation):
-
-| Role | Tool / source |
-|------|----------------|
-| **Reasoning & coding / algorithmic ground** | **Anthropic Claude 4.6 Opus** — primary assistant for implementation logic, structure, and problem-solving. |
-| **Initial background & literature review** | **Google Gemini 3.1** (research-oriented workflows) — early framing and survey of the problem space. Working notes and links: [Literature review & working notes (author)](#literature-review-notes). |
-| **Web app — ideation, planning, implementation** | **Cursor** (Composer) — fast iteration in a stack already familiar to the author: **Django**, **jQuery**, **Tailwind CSS**, vanilla JavaScript, background threading, and lightweight async processing for match runs. |
-| **Architecture & docs** | **Claude** again used to summarize and tighten prose from the author’s bullets for the architecture write-up and technical summaries. |
-
-**On repo norms:** There is no single mandatory GitHub standard for listing AI collaborators. A dedicated **Acknowledgements** section in the README (as here), plus matching notes in `docs/architecture.tex` or other docs you ship alongside the repo, is a common and transparent pattern. Optional extras some projects use: `ACKNOWLEDGEMENTS.md`, `CITATION.cff`, or author metadata in `pyproject.toml` / `CITATION.bib` — pick what fits your project.
-
-The **runtime scoring** path in code uses **OpenAI** models where configured (`gpt-4o-mini` / `gpt-4o`, embeddings); that dependency is separate from the **authoring** assistants named above.
