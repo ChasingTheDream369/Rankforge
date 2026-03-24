@@ -16,7 +16,7 @@ OPENAI_TEMPERATURE = 0.0
 # Two-stage scorer models
 EXTRACTION_MODEL = "gpt-4o-mini"   # Stage 1: cheap profile extraction
 SCORING_MODEL = "gpt-4o"           # Stage 2: few-shot scoring with reasoning
-EXTRACTION_USE_TOOLS = True        # Use canonicalize_skill/canonicalize_domain tools for deterministic LLM output
+EXTRACTION_USE_TOOLS = False       # Reserved; extraction uses single-shot JSON + post-normalize (faster, reliable)
 D2_AGENT_ENABLED = True            # Use agent + tools for D2 (Seniority) scoring; fallback to deterministic if disabled or fails
 D3_LLM_FALLBACK = True            # When domain not in ontology (exact/adjacent), use LLM tool
 D1_LLM_FALLBACK = True             # When skill not in ontology (exact/adjacent/group), use LLM tool

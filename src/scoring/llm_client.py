@@ -55,15 +55,35 @@ def call_scoring_llm(prompt: str, max_tokens: int = 1000, system: str = "") -> O
 
 
 def parse_json(raw: Optional[str]) -> Optional[dict]:
-    """Strip markdown fences and parse JSON. Returns None on failure."""
+    """Strip markdown fences and parse JSON.
+
+    Handles truncated responses by closing open brackets/braces so that
+    partially-generated JSON (from hitting max_tokens) still parses.
+    """
     if not raw:
         return None
     cleaned = raw.strip()
     if cleaned.startswith("```"):
         cleaned = re.sub(r'^```(?:json)?\s*', '', cleaned)
         cleaned = re.sub(r'\s*```$', '', cleaned)
+
+    # Happy path
     try:
         return json.loads(cleaned)
+    except Exception:
+        pass
+
+    # Truncation recovery: strip trailing partial value, then close open brackets
+    # Remove a trailing incomplete string/value (e.g. `"evidence": "some text`)
+    truncated = re.sub(r',\s*"[^"]*"?\s*:\s*"?[^"{}[\]]*$', '', cleaned)
+    # Remove a trailing comma left over
+    truncated = re.sub(r',\s*$', '', truncated)
+    # Count open vs close for [] and {}
+    open_sq = truncated.count('[') - truncated.count(']')
+    open_br = truncated.count('{') - truncated.count('}')
+    truncated += ']' * max(0, open_sq) + '}' * max(0, open_br)
+    try:
+        return json.loads(truncated)
     except Exception:
         return None
 

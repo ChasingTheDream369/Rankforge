@@ -3,8 +3,7 @@
 import json
 from typing import Optional
 
-from src.config import EXTRACTION_USE_TOOLS, EXTRACTION_MODEL
-from src.scoring.llm_client import call_openai, call_extraction_llm, parse_json, has_llm
+from src.scoring.llm_client import call_extraction_llm, parse_json, has_llm
 
 _EXTRACTION_TOOLS = [
     {"type": "function", "function": {"name": "canonicalize_skill", "description": "Get canonical form of a skill. Call for EVERY skill.", "parameters": {"type": "object", "properties": {"skill_name": {"type": "string"}}, "required": ["skill_name"]}}},
@@ -24,7 +23,7 @@ def _execute_extraction_tool(name: str, args: dict) -> str:
 def _call_extraction_with_tools(prompt: str, system: str, max_tokens: int = 800) -> Optional[str]:
     if not has_llm():
         return None
-    from src.config import OPENAI_TEMPERATURE
+    from src.config import OPENAI_TEMPERATURE, EXTRACTION_MODEL
     from src.scoring.llm_client import get_openai_client
     client = get_openai_client()
     msgs = [{"role": "system", "content": system}, {"role": "user", "content": prompt}]
@@ -47,46 +46,51 @@ def _call_extraction_with_tools(prompt: str, system: str, max_tokens: int = 800)
     return None
 
 
-_JD_SYSTEM = "You are a structured extraction assistant. Extract ONLY what is explicitly stated. Use canonicalize_skill for EVERY skill and canonicalize_domain for domain. Return JSON only."
+_JD_SYSTEM = "You are a structured extraction assistant. Extract ONLY what is explicitly stated. Return valid JSON only, no markdown."
 _JD_PROMPT = """Extract a structured profile from this job description.
 
 JOB DESCRIPTION:
 {jd_text}
 
 Return JSON: {{"required_skills": [{{"name": "...", "importance": "core" or "nice"}}], "years_required": 0, "domain": "fintech|enterprise_saas|ai_ml|healthcare|platform_devops|ecommerce|other", "seniority": "junior|mid|senior|staff|lead|executive", "hard_constraints": []}}
-Max 10 skills. Use tools for skill names and domain."""
+Max 10 skills."""
 
-_RESUME_SYSTEM = "You are a structured extraction assistant. Extract ONLY what is explicitly written. Evidence must be VERBATIM. Use canonicalize_skill for EVERY skill and canonicalize_domain for domains. Return JSON only."
+_RESUME_SYSTEM = "You are a structured extraction assistant. Extract ONLY what is explicitly written. Evidence must be VERBATIM quotes from the resume. Return valid JSON only, no markdown."
 _RESUME_PROMPT = """Extract a structured profile from this resume.
 
 RESUME:
 {resume_text}
 
 Return JSON: {{"skills": [{{"name": "...", "level": "BUILT_WITH"|"USED"|"LISTED", "evidence": "verbatim quote"}}], "total_years": 0, "domains": [], "seniority_signals": {{"leadership": "quote or null", "architecture": "quote or null", "scale": "quote or null", "ownership": "quote or null"}}, "highlights": []}}
-Evidence MUST be verbatim. Use tools for skills and domains."""
+Evidence MUST be verbatim substrings from the resume text."""
 
 
 def extract_jd_profile(jd_text: str) -> Optional[dict]:
+    """Two attempts: transient parse/API glitches should not force raw-text scoring."""
     from src.scoring.extraction_schema import normalize_jd_profile
-    prompt = _JD_PROMPT.format(jd_text=jd_text[:2500])
-    if EXTRACTION_USE_TOOLS and has_llm():
-        raw = _call_extraction_with_tools(prompt, _JD_SYSTEM, 600)
-    else:
-        raw = call_extraction_llm(prompt, 600, _JD_SYSTEM)
-    result = parse_json(raw)
-    if result and "required_skills" in result and "domain" in result:
-        return normalize_jd_profile(result)
+    for attempt in range(2):
+        cap = 4000 if attempt else 2500
+        tokens = 1600 if attempt else 1200
+        prompt = _JD_PROMPT.format(jd_text=jd_text[:cap])
+        raw = call_extraction_llm(prompt, tokens, _JD_SYSTEM)
+        result = parse_json(raw)
+        if result and "required_skills" in result and "domain" in result:
+            return normalize_jd_profile(result)
     return None
 
 
 def extract_resume_profile(resume_text: str) -> Optional[dict]:
+    """Two attempts with more headroom on retry; relax evidence check on retry only."""
     from src.scoring.extraction_schema import normalize_resume_profile
-    prompt = _RESUME_PROMPT.format(resume_text=resume_text[:4000])
-    if EXTRACTION_USE_TOOLS and has_llm():
-        raw = _call_extraction_with_tools(prompt, _RESUME_SYSTEM, 800)
-    else:
-        raw = call_extraction_llm(prompt, 800, _RESUME_SYSTEM)
-    result = parse_json(raw)
-    if result and "skills" in result and "total_years" in result:
-        return normalize_resume_profile(result, source_text=resume_text[:3000], validate_evidence=True)
+    for attempt in range(2):
+        cap = 8000 if attempt else 4000
+        tokens = 2500 if attempt else 2000
+        prompt = _RESUME_PROMPT.format(resume_text=resume_text[:cap])
+        raw = call_extraction_llm(prompt, tokens, _RESUME_SYSTEM)
+        result = parse_json(raw)
+        if result and "skills" in result and "total_years" in result:
+            src = resume_text[:6000 if attempt else 3000]
+            return normalize_resume_profile(
+                result, source_text=src, validate_evidence=(attempt == 0)
+            )
     return None

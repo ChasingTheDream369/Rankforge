@@ -70,7 +70,7 @@ class MatchResult(models.Model):
     dim_composite = models.FloatField(default=0.0)
     ce_sigmoid = models.FloatField(default=0.0)
     ce_weight_used = models.FloatField(default=0.0)
-    scoring_mode = models.CharField(max_length=20, default='auto')
+    scoring_mode = models.CharField(max_length=40, default='auto')
 
     strengths = models.JSONField(default=list)
     gaps = models.JSONField(default=list)

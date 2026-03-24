@@ -336,9 +336,11 @@ def score_resume(
                 }
                 mode = "llm_two_stage"
 
+        # Raw-text deterministic only when OpenAI is configured but BOTH profile
+        # extractions failed after retries (rare: repeated API/parse failures).
         if result is None:
             if verbose:
-                print("        [Fallback] No profile scores available — using deterministic")
+                print("        [Fallback] No profiles after LLM retries — raw-text deterministic")
             fallback = score_deterministic(jd_text, resume_text)
             result = {
                 "d1_skills": fallback["d1_skills"]["score"], "d2_seniority": fallback["d2_seniority"]["score"],
@@ -348,6 +350,7 @@ def score_resume(
             }
             mode = "deterministic_fallback"
     else:
+        # No API key — regex-only path (intended deterministic use).
         fallback = score_deterministic(jd_text, resume_text)
         result = {
             "d1_skills": fallback["d1_skills"]["score"], "d2_seniority": fallback["d2_seniority"]["score"],
@@ -355,6 +358,7 @@ def score_resume(
             "confidence": fallback["confidence"], "strengths": fallback["strengths"],
             "gaps": fallback["gaps"], "rationale": fallback["rationale"], "_raw_detail": fallback,
         }
+        mode = "deterministic_no_key"
 
     d1 = float(result.get("d1_skills", 0))
     d2 = float(result.get("d2_seniority", 0))
