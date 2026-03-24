@@ -7,6 +7,7 @@ OpenAI only.
 
 import json
 import math
+import re
 from typing import Optional
 
 from src.config import (
@@ -185,12 +186,49 @@ def verify_score(jd_profile: dict, resume_profile: dict, initial: dict) -> Optio
 def is_resume(text: str) -> bool:
     if not has_llm():
         return True
+
+    # Fast pattern-based pre-check — requires markers from TWO distinct categories
+    # to avoid false-positives on non-resume docs (e.g. earnings reports with "Summary").
+    _CONTACT = re.compile(
+        r'(?i)\b(email|phone|linkedin|github|portfolio|contact)\b'
+        r'|[\w.+-]+@[\w-]+\.[a-z]{2,}'  # bare email address
+    )
+    _SECTION = re.compile(
+        r'(?i)\b(experience|education|employment|work history|skills|certifications?|'
+        r'bachelor|master|university|college|projects?)\b'
+    )
+    if _CONTACT.search(text) and len(_SECTION.findall(text)) >= 2:
+        return True
+
     from src.scoring.llm_client import call_extraction_llm
-    snippet = text[:1200]
-    prompt = "Is the following document a professional resume or CV? Answer with exactly one word: YES or NO.\n\nDOCUMENT:\n" + snippet
+
+    _SYSTEM = "Answer YES or NO only."
+    _PROMPT = (
+        "Does the following text appear to be a professional resume or CV, or does it contain "
+        "typical resume content such as work experience, education, skills, or contact information? "
+        "Answer with exactly one word: YES or NO.\n\nDOCUMENT:\n"
+    )
+
+    # Check a larger leading snippet — compressed PDFs need more chars to be representative.
     try:
-        raw = call_extraction_llm(prompt, max_tokens=5, system="Answer YES or NO only.")
-        return raw is not None and raw.strip().upper().startswith("YES")
+        snippet = text[:3000]
+        raw = call_extraction_llm(_PROMPT + snippet, max_tokens=5, system=_SYSTEM)
+        if raw is not None and raw.strip().upper().startswith("YES"):
+            return True
+
+        # Fallback: check the middle of the document in case the header is sparse.
+        if len(text) > 3000:
+            mid = len(text) // 2
+            snippet2 = text[mid: mid + 2000]
+            raw2 = call_extraction_llm(
+                "Does the following text contain professional resume content "
+                "(experience, education, skills)? Answer YES or NO only.\n\nTEXT:\n" + snippet2,
+                max_tokens=5, system=_SYSTEM,
+            )
+            if raw2 is not None and raw2.strip().upper().startswith("YES"):
+                return True
+
+        return False
     except Exception:
         return True
 
@@ -217,18 +255,53 @@ def score_resume(
     jdp = jd_profile  # may be extracted below; used for dimension weights and skill_detail
 
     if has_llm():
-        jdp = jdp or extract_jd_profile(jd_text)
-        rsp = resume_profile or extract_resume_profile(resume_text)
+        # Extract JD profile — only if not already provided (extracted once per run upstream).
+        # Keep it isolated so a resume-extraction failure can't wipe a valid JD profile.
+        if not jdp:
+            try:
+                jdp = extract_jd_profile(jd_text)
+            except Exception as _jd_err:
+                if verbose:
+                    print(f"        [LLM] JD extraction failed ({_jd_err.__class__.__name__})")
+                jdp = None
+
+        # Extract resume profile independently.
+        rsp = resume_profile
+        if not rsp:
+            try:
+                rsp = extract_resume_profile(resume_text)
+            except Exception as _rsp_err:
+                if verbose:
+                    print(f"        [LLM] Resume extraction failed ({_rsp_err.__class__.__name__}) — will use deterministic")
 
         if jdp and rsp:
-            result = score_profiles(jdp, rsp)
-            mode = "llm_two_stage"
+            # Compute profile-based dimension scores FIRST — these are the most
+            # valuable outputs and don't depend on the scoring LLM at all.
+            d1_det = d2_det = d3_det = d4_det = None
+            skill_detail_d1 = signals_detail_d2 = d3_reason = d4_checks = None
+            try:
+                d1_det, skill_detail_d1 = compute_d1_from_profiles(jdp, rsp, use_llm_fallback=D1_LLM_FALLBACK)
+                d2_det, signals_detail_d2 = compute_d2(jdp, rsp)
+                d3_det, d3_reason = compute_d3(jdp, rsp, use_llm_fallback=D3_LLM_FALLBACK)
+                d4_det, d4_checks = compute_d4(jdp, rsp)
+            except Exception as _dim_err:
+                if verbose:
+                    print(f"        [DIM] Dimension scoring failed ({_dim_err.__class__.__name__})")
 
-            d1_det, skill_detail_d1 = compute_d1_from_profiles(jdp, rsp, use_llm_fallback=D1_LLM_FALLBACK)
-            d2_det, signals_detail_d2 = compute_d2(jdp, rsp)
-            d3_det, d3_reason = compute_d3(jdp, rsp, use_llm_fallback=D3_LLM_FALLBACK)
-            d4_det, d4_checks = compute_d4(jdp, rsp)
-            if result:
+            # Now call the scoring LLM for the narrative (strengths, gaps, rationale).
+            # If this fails or returns None, the dimension scores above are still used.
+            try:
+                result = score_profiles(jdp, rsp)
+                mode = "llm_two_stage"
+            except Exception as _score_err:
+                if verbose:
+                    print(f"        [LLM] Scoring LLM failed ({_score_err.__class__.__name__})")
+                result = None
+
+            dims_ok = all(v is not None for v in (d1_det, d2_det, d3_det, d4_det))
+
+            if result and dims_ok:
+                # Best case: LLM narrative + profile-based dimensions
                 result["d1_skills"] = d1_det
                 result["d2_seniority"] = d2_det
                 result["d3_domain"] = d3_det
@@ -238,17 +311,34 @@ def score_resume(
                 result["_d3_reason"] = d3_reason
                 result["_d4_checks"] = d4_checks
 
-            if result and result.get("confidence") == "LOW":
+                if result.get("confidence") == "LOW":
+                    if verbose:
+                        print("        [Agentic] LOW confidence — running verification pass")
+                    verified = verify_score(jdp, rsp, result)
+                    if verified:
+                        result = verified
+                        mode = "agentic_retry"
+
+            elif dims_ok:
+                # Scoring LLM failed/returned bad JSON, but dimension scores are good.
+                # Use profile-based dimensions with empty narrative instead of falling
+                # all the way back to raw-text deterministic scoring.
                 if verbose:
-                    print("        [Agentic] LOW confidence — running verification pass")
-                verified = verify_score(jdp, rsp, result)
-                if verified:
-                    result = verified
-                    mode = "agentic_retry"
+                    print("        [LLM] Scoring LLM returned no result — using profile-based dimensions")
+                result = {
+                    "d1_skills": d1_det, "d2_seniority": d2_det,
+                    "d3_domain": d3_det, "d4_constraints": d4_det,
+                    "_skill_detail_d1": skill_detail_d1,
+                    "_signals_detail_d2": signals_detail_d2,
+                    "_d3_reason": d3_reason, "_d4_checks": d4_checks,
+                    "confidence": "MEDIUM", "strengths": [], "gaps": [],
+                    "rationale": "Scored from extracted profiles (scoring LLM unavailable).",
+                }
+                mode = "llm_two_stage"
 
         if result is None:
             if verbose:
-                print("        [Fallback] LLM scoring failed — using deterministic")
+                print("        [Fallback] No profile scores available — using deterministic")
             fallback = score_deterministic(jd_text, resume_text)
             result = {
                 "d1_skills": fallback["d1_skills"]["score"], "d2_seniority": fallback["d2_seniority"]["score"],

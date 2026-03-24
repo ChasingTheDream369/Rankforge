@@ -16,7 +16,7 @@
             <h2 class="text-sm font-semibold text-text-dark">Ingestion &amp; Sanitization</h2>
         </div>
         <div class="px-5 py-4 text-sm text-text-body leading-relaxed space-y-2">
-            <p>Raw resumes (PDF, DOCX, TXT) are parsed by <code class="text-xs bg-background-dust px-1.5 py-0.5 rounded font-mono">TextExtractor</code>. Extracted text passes through a 7-detector adversarial sanitizer:</p>
+            <p>Raw resumes (PDF, DOCX, TXT, ZIP) are parsed by <code class="text-xs bg-background-dust px-1.5 py-0.5 rounded font-mono">TextExtractor</code>. Extracted text passes through a 7-detector adversarial sanitizer:</p>
             <ul class="list-disc list-inside text-text-disabled space-y-1 text-xs ml-2">
                 <li><strong class="text-text-body">Prompt injection</strong> — catches instruction-override attempts hidden in text</li>
                 <li><strong class="text-text-body">Invisible/white text</strong> — detects keyword stuffing via zero-opacity characters</li>
@@ -26,7 +26,7 @@
                 <li><strong class="text-text-body">Font-size manipulation</strong> — tiny text used to inflate keyword count</li>
                 <li><strong class="text-text-body">Non-resume gate (LLM)</strong> — gpt-4o-mini YES/NO classifier rejects cover letters, portfolios, etc.</li>
             </ul>
-            <p class="text-text-disabled text-xs mt-1">Flagged documents receive a <code class="bg-background-dust px-1 py-0.5 rounded font-mono">threat_level</code> of HIGH and zero score without entering downstream stages.</p>
+            <p class="text-text-disabled text-xs mt-1">Flagged documents receive a <code class="bg-background-dust px-1 py-0.5 rounded font-mono">threat_level</code> of HIGH and zero score without entering downstream stages. ZIP uploads are expanded in-memory; up to 50 resumes per run.</p>
         </div>
     </div>
 
@@ -37,12 +37,12 @@
             <h2 class="text-sm font-semibold text-text-dark">Hybrid Retrieval — BM25 + Dense Bi-Encoder</h2>
         </div>
         <div class="px-5 py-4 text-sm text-text-body leading-relaxed space-y-2">
-            <p>Two independent retrievers score each resume against the JD:</p>
+            <p>Two independent retrievers score each resume against the JD (top-50 each):</p>
             <ul class="list-disc list-inside text-xs text-text-disabled space-y-1 ml-2">
-                <li><strong class="text-text-body">BM25</strong> — lexical term overlap, rewards exact keyword matches, robust for technical skill terms</li>
-                <li><strong class="text-text-body">Dense bi-encoder</strong> (<code class="bg-background-dust px-1 py-0.5 rounded font-mono">all-MiniLM-L6-v2</code>) — semantic cosine similarity in 384-d embedding space</li>
+                <li><strong class="text-text-body">BM25</strong> — lexical term overlap; rewards exact keyword matches; robust for technical skill terms</li>
+                <li><strong class="text-text-body">Dense bi-encoder</strong> — when OpenAI key is present: <code class="bg-background-dust px-1 py-0.5 rounded font-mono">text-embedding-3-small</code> (1536-d); otherwise <code class="bg-background-dust px-1 py-0.5 rounded font-mono">all-MiniLM-L6-v2</code> (384-d, local). Cosine similarity in the selected embedding space.</li>
             </ul>
-            <p class="text-text-disabled text-xs mt-1">Both scores are normalized to [0,1] before fusion. This stage acts as a fast pre-filter.</p>
+            <p class="text-text-disabled text-xs mt-1">Both scores are normalized to [0,1] before fusion. This stage acts as a fast pre-filter over the full corpus.</p>
         </div>
     </div>
 
@@ -53,9 +53,9 @@
             <h2 class="text-sm font-semibold text-text-dark">RRF Fusion</h2>
         </div>
         <div class="px-5 py-4 text-sm text-text-body leading-relaxed space-y-2">
-            <p>Reciprocal Rank Fusion combines BM25 and dense rankings:</p>
+            <p>Reciprocal Rank Fusion combines BM25 and dense rankings into a unified shortlist:</p>
             <p class="font-mono text-xs bg-background-dust rounded px-3 py-2 text-text-body">RRF(d) = Σ 1 / (k + rank_i(d))   where k=60</p>
-            <p class="text-text-disabled text-xs">RRF is parameter-light, handles rank ties gracefully, and consistently outperforms score-level weighted averaging when retriever calibrations differ.</p>
+            <p class="text-text-disabled text-xs">Top 50 from RRF form the candidate pool. Of those, only the top 50% (<code class="bg-background-dust px-1 py-0.5 rounded font-mono">CE_TOP_PERCENT=0.50</code>) proceed to full cross-encoder scoring; the remainder receive a zero logit. RRF is parameter-light, handles rank ties gracefully, and consistently outperforms score-level weighted averaging when retriever calibrations differ.</p>
         </div>
     </div>
 
@@ -66,8 +66,8 @@
             <h2 class="text-sm font-semibold text-text-dark">Cross-Encoder Re-Ranking</h2>
         </div>
         <div class="px-5 py-4 text-sm text-text-body leading-relaxed space-y-2">
-            <p>Top-N candidates from RRF pass through a cross-encoder (<code class="text-xs bg-background-dust px-1 py-0.5 rounded font-mono">ms-marco-MiniLM-L-6-v2</code>) which jointly encodes JD+resume and produces a relevance logit. Sigmoid-transformed to [0,1].</p>
-            <p class="text-text-disabled text-xs">Cross-encoders are ~10× slower than bi-encoders but far more accurate on nuanced semantic matching — hence applied only to the shortlist, not the full corpus.</p>
+            <p>Top-N candidates from the RRF pool pass through a cross-encoder (<code class="text-xs bg-background-dust px-1 py-0.5 rounded font-mono">cross-encoder/ms-marco-MiniLM-L-6-v2</code>) which jointly encodes JD+resume and produces a relevance logit. Sigmoid-transformed to [0,1].</p>
+            <p class="text-text-disabled text-xs">Cross-encoders are ~10× slower than bi-encoders but far more accurate on nuanced semantic matching — hence applied only to the shortlisted top 50% of the RRF pool, not the full corpus.</p>
         </div>
     </div>
 
@@ -75,29 +75,62 @@
     <div class="bg-background-paper border border-divider-light rounded-xl overflow-hidden">
         <div class="flex items-center gap-3 px-5 py-4 border-b border-divider-light bg-background-dust">
             <span class="text-xs font-bold text-white bg-primary-main px-2.5 py-1 rounded-full">L4</span>
-            <h2 class="text-sm font-semibold text-text-dark">LLM-as-Judge — 4-Dimension Scoring</h2>
+            <h2 class="text-sm font-semibold text-text-dark">Two-Stage LLM Scoring — Profile Extraction + 4-Dimension Judge</h2>
         </div>
         <div class="px-5 py-4 text-sm text-text-body leading-relaxed space-y-3">
-            <p>An LLM (gpt-4o-mini, temp=0.0) evaluates each candidate on four structured dimensions, returning a validated JSON schema:</p>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div class="bg-background-dust rounded-lg px-4 py-3">
-                    <p class="text-xs font-semibold text-primary-light mb-1">D1 — Hard Skills (×0.40)</p>
-                    <p class="text-xs text-text-disabled">Skill match coverage: BUILT_WITH / USED / LISTED / ABSENT per required skill</p>
+                    <p class="text-xs font-semibold text-primary-light mb-1">Stage 1 — Profile Extraction (gpt-4o-mini)</p>
+                    <p class="text-xs text-text-disabled">Extracts structured <code class="bg-background-paper px-1 rounded font-mono">jd_profile</code> and <code class="bg-background-paper px-1 rounded font-mono">resume_profile</code> via tool calls (<code class="bg-background-paper px-1 rounded font-mono">canonicalize_skill</code>, <code class="bg-background-paper px-1 rounded font-mono">canonicalize_domain</code>) for deterministic, schema-validated output.</p>
                 </div>
                 <div class="bg-background-dust rounded-lg px-4 py-3">
-                    <p class="text-xs font-semibold text-primary-light mb-1">D2 — Experience Depth (×0.35)</p>
-                    <p class="text-xs text-text-disabled">Seniority alignment, years, scope of ownership vs JD requirements</p>
-                </div>
-                <div class="bg-background-dust rounded-lg px-4 py-3">
-                    <p class="text-xs font-semibold text-primary-light mb-1">D3 — Domain Fit (×0.15)</p>
-                    <p class="text-xs text-text-disabled">Industry, product type, and context transferability</p>
-                </div>
-                <div class="bg-background-dust rounded-lg px-4 py-3">
-                    <p class="text-xs font-semibold text-primary-light mb-1">D4 — Constraints (×0.10)</p>
-                    <p class="text-xs text-text-disabled">Location, visa, availability, certifications, hard requirements</p>
+                    <p class="text-xs font-semibold text-primary-light mb-1">Stage 2 — Few-Shot Scoring (gpt-4o)</p>
+                    <p class="text-xs text-text-disabled">Domain-specific few-shot examples primed by JD domain (FinTech / AI-ML). Returns D1–D4 scores, confidence, recommendation, strengths, gaps, and rationale. Temp=0.0.</p>
                 </div>
             </div>
-            <p class="text-text-disabled text-xs">Dim composite = D1×0.40 + D2×0.35 + D3×0.15 + D4×0.10. Final score = α×cross_encoder + (1−α)×dim_composite. Falls back to deterministic regex scoring if LLM unavailable.</p>
+            <p class="text-text-disabled text-xs">Stage 2 dimensions evaluated against extracted profiles:</p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div class="bg-background-dust rounded-lg px-4 py-3">
+                    <p class="text-xs font-semibold text-primary-light mb-1">D1 — Hard Skills</p>
+                    <p class="text-xs text-text-disabled">Skill match coverage: BUILT_WITH=1.0 / USED=0.7 / LISTED=0.3 / ABSENT=0.0 per required skill. Core skills weighted higher.</p>
+                </div>
+                <div class="bg-background-dust rounded-lg px-4 py-3">
+                    <p class="text-xs font-semibold text-primary-light mb-1">D2 — Experience Depth</p>
+                    <p class="text-xs text-text-disabled">Seniority alignment via agentic signals: leadership, architecture, scale (TPS/users/metrics), ownership. D2 agent uses tool calls; falls back to deterministic if disabled or fails.</p>
+                </div>
+                <div class="bg-background-dust rounded-lg px-4 py-3">
+                    <p class="text-xs font-semibold text-primary-light mb-1">D3 — Domain Fit</p>
+                    <p class="text-xs text-text-disabled">Same domain=1.0, adjacent/transferable=0.5–0.8, unrelated=0.0–0.3. LLM tool called when domain not in ontology.</p>
+                </div>
+                <div class="bg-background-dust rounded-lg px-4 py-3">
+                    <p class="text-xs font-semibold text-primary-light mb-1">D4 — Constraints</p>
+                    <p class="text-xs text-text-disabled">Fraction of hard_constraints met (location, visa, certs, years). If no constraints specified, defaults to 1.0.</p>
+                </div>
+            </div>
+            <div class="bg-background-dust rounded-lg px-4 py-3">
+                <p class="text-xs font-semibold text-primary-light mb-2">Role-Adaptive Dimension Weights</p>
+                <div class="grid grid-cols-5 gap-1 text-xs text-center mb-1">
+                    <div class="text-text-disabled font-semibold">Role</div>
+                    <div class="text-text-disabled font-semibold">D1 Skills</div>
+                    <div class="text-text-disabled font-semibold">D2 Exp</div>
+                    <div class="text-text-disabled font-semibold">D3 Domain</div>
+                    <div class="text-text-disabled font-semibold">D4 Constraints</div>
+                </div>
+                <div class="grid grid-cols-5 gap-1 text-xs text-center text-text-disabled space-y-0.5">
+                    <div>Junior</div><div>0.50</div><div>0.25</div><div>0.15</div><div>0.10</div>
+                    <div>Mid</div><div>0.40</div><div>0.35</div><div>0.15</div><div>0.10</div>
+                    <div>Senior</div><div>0.35</div><div>0.45</div><div>0.12</div><div>0.08</div>
+                    <div>Staff/Lead</div><div>0.30</div><div>0.50</div><div>0.12</div><div>0.08</div>
+                    <div>Executive</div><div>0.25</div><div>0.55</div><div>0.12</div><div>0.08</div>
+                </div>
+                <p class="text-xs text-text-disabled mt-2">Weights are resolved from JD seniority automatically, or overridden via the custom weight UI at run creation.</p>
+            </div>
+            <p class="text-text-disabled text-xs">Dim composite = w1×D1 + w2×D2 + w3×D3 + w4×D4. <strong class="text-text-body">Final score = (1−α)×dim_composite + α×sigmoid(ce_logit)</strong>, α=0.50. If Stage 2 returns LOW confidence, an agentic verification pass re-evaluates the candidate. Falls back to deterministic regex scoring if LLM unavailable.</p>
+            <div class="flex flex-wrap gap-2 text-xs">
+                <span class="bg-primary-main/10 text-primary-light px-2 py-0.5 rounded-full">llm_two_stage</span>
+                <span class="bg-primary-main/10 text-primary-light px-2 py-0.5 rounded-full">agentic_retry</span>
+                <span class="bg-background-dust text-text-disabled px-2 py-0.5 rounded-full border border-divider-light">deterministic_fallback</span>
+            </div>
         </div>
     </div>
 
@@ -109,7 +142,7 @@
         </div>
         <div class="px-5 py-4 text-sm text-text-body leading-relaxed space-y-2">
             <p>The ESCO occupation/skill graph allows partial credit for adjacent skills. A candidate missing "Kubernetes" but with "Docker Swarm" receives a penalized partial match through graph traversal rather than a zero.</p>
-            <p class="text-text-disabled text-xs">Same-level skills in the ontology are matched with a configurable penalty (default 0.7×). This prevents hard misses on near-equivalent technologies and improves nDCG in the ablation study.</p>
+            <p class="text-text-disabled text-xs">Same-level skills in the ontology are matched with a configurable penalty (default 0.7×). D1 and D3 scorers consult the ontology first; LLM tool called only when skill/domain is absent from the graph. This prevents hard misses on near-equivalent technologies and improves nDCG in the ablation study.</p>
         </div>
     </div>
 
@@ -120,13 +153,14 @@
             <h2 class="text-sm font-semibold text-text-dark">Evaluation Metrics</h2>
         </div>
         <div class="px-5 py-4 text-sm text-text-body leading-relaxed space-y-2">
-            <p>Against golden labels (<code class="text-xs bg-background-dust px-1 py-0.5 rounded font-mono">golden_dataset.json</code>):</p>
+            <p>Against golden labels (<code class="text-xs bg-background-dust px-1 py-0.5 rounded font-mono">golden_dataset.jsonl</code>):</p>
             <ul class="list-disc list-inside text-xs text-text-disabled space-y-1 ml-2">
                 <li><strong class="text-text-body">nDCG@k</strong> — Normalized Discounted Cumulative Gain at k=3,5,10</li>
                 <li><strong class="text-text-body">MRR</strong> — Mean Reciprocal Rank (first relevant result position)</li>
                 <li><strong class="text-text-body">Precision@k</strong> — Fraction of top-k results that are relevant</li>
                 <li><strong class="text-text-body">Spearman ρ</strong> — Rank correlation between predicted and golden order</li>
             </ul>
+            <p class="text-text-disabled text-xs mt-1">The Ablation page lets you toggle individual stages (BM25, dense, cross-encoder, LLM) and observe metric impact on the golden dataset in real time.</p>
         </div>
     </div>
 

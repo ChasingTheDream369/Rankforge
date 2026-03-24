@@ -25,8 +25,10 @@
         </svg>
         Export CSV
     </a>
+    {% endif %}
+    {% if run.status == 'complete' or run.status == 'failed' %}
     <button id="rescore-btn" class="px-3 py-1.5 rounded-lg text-xs font-medium border border-divider-light text-text-body hover:bg-hover transition-colors">
-        Re-score
+        {% if run.status == 'failed' %}Retry{% else %}Re-score{% endif %}
     </button>
     {% endif %}
     <span id="status-badge" class="px-3 py-1.5 rounded-lg text-xs font-medium

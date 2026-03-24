@@ -132,7 +132,7 @@
         <svg class="toggle-icon w-4 h-4 text-text-disabled transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
     </button>
     <div id="skill-detail" class="hidden px-6 pb-5">
-        {% with skills_list=result.skill_detail.skills_checked|default:result.skill_detail.d1_breakdown %}
+        {% with skills_list=skills_list %}
         {% if skills_list %}
         <div class="space-y-3">
             {% for skill in skills_list %}

@@ -1,6 +1,9 @@
 import csv
 import os
+import sys
 import json
+import subprocess
+from django.conf import settings
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
@@ -8,26 +11,66 @@ from matcherapp.decorators import login_required
 from matcherapp.models import Job, MatchRun, Resume, MatchResult
 
 
+def _launch_run_worker(run_id: int):
+    """Start process_run in a detached subprocess that survives server reloads."""
+    subprocess.Popen(
+        [sys.executable, 'manage.py', 'process_run', str(run_id)],
+        cwd=str(settings.BASE_DIR),
+        start_new_session=True,
+        stdout=open(os.path.join(settings.BASE_DIR, 'logs', f'run_{run_id}.log'), 'a')
+               if os.path.isdir(os.path.join(settings.BASE_DIR, 'logs'))
+               else subprocess.DEVNULL,
+        stderr=subprocess.STDOUT,
+    )
+
+
+WEIGHT_PROFILE_PRESETS = {
+    "junior":    (50, 25, 15, 10),
+    "mid":       (40, 35, 15, 10),
+    "senior":    (35, 45, 12, 8),
+    "staff":     (30, 50, 12, 8),
+    "executive": (25, 55, 12, 8),
+}
+
+
 def _parse_scoring_config_from_request(request) -> dict:
     """
     Build MatchRun.scoring_config from POST.
-    Default: empty dict → scorer uses base constants + JD seniority presets.
-    Custom: user percentages for D1–D4 (normalized to sum 1.0).
+    Supports three modes:
+      - "auto" (default): empty dict → scorer uses base constants + JD seniority presets.
+      - Named profile (junior/mid/senior/staff/executive): preset weights, optionally tweaked.
+      - "custom": user percentages for D1–D4.
+    All non-auto modes normalize D1–D4 to sum 1.0.
     """
-    if request.POST.get("custom_dim_weights") not in ("1", "true", "on", "yes"):
-        return {}
+    profile = (request.POST.get("weight_profile") or "auto").strip().lower()
+
+    if profile == "auto":
+        if request.POST.get("custom_dim_weights") not in ("1", "true", "on", "yes"):
+            return {}
+        profile = "custom"
+
+    if profile in WEIGHT_PROFILE_PRESETS:
+        pd1, pd2, pd3, pd4 = WEIGHT_PROFILE_PRESETS[profile]
+    else:
+        pd1, pd2, pd3, pd4 = 0, 0, 0, 0
+
     try:
-        d1 = float(request.POST.get("d1_pct", 0) or 0)
-        d2 = float(request.POST.get("d2_pct", 0) or 0)
-        d3 = float(request.POST.get("d3_pct", 0) or 0)
-        d4 = float(request.POST.get("d4_pct", 0) or 0)
+        d1 = float(request.POST.get("d1_pct", pd1) or pd1)
+        d2 = float(request.POST.get("d2_pct", pd2) or pd2)
+        d3 = float(request.POST.get("d3_pct", pd3) or pd3)
+        d4 = float(request.POST.get("d4_pct", pd4) or pd4)
     except (TypeError, ValueError):
-        return {}
+        if profile in WEIGHT_PROFILE_PRESETS:
+            d1, d2, d3, d4 = WEIGHT_PROFILE_PRESETS[profile]
+        else:
+            return {}
+
     s = d1 + d2 + d3 + d4
     if s <= 0:
         return {}
     return {
         "custom_dims": True,
+        "profile": profile,
         "weights": [d1 / s, d2 / s, d3 / s, d4 / s],
         "weights_raw_pct": [d1, d2, d3, d4],
     }
@@ -126,10 +169,7 @@ def start_run(request):
         for d in temp_dirs:
             shutil.rmtree(d, ignore_errors=True)
 
-        import threading
-        from matcherapp.apps.matching.services import process_match_run
-        t = threading.Thread(target=process_match_run, args=(run.id,), daemon=True)
-        t.start()
+        _launch_run_worker(run.id)
 
         return JsonResponse({
             'run_id': run.id,
@@ -171,6 +211,23 @@ def _run_results_json(run):
 def run_status(request, run_id):
     try:
         run = MatchRun.objects.get(id=run_id)
+
+        if run.status in ('processing', 'pending'):
+            worker_pid = (run.scoring_config or {}).get('_worker_pid')
+            worker_alive = False
+            if worker_pid:
+                try:
+                    os.kill(worker_pid, 0)
+                    worker_alive = True
+                except OSError:
+                    pass
+            if not worker_alive and run.status == 'processing':
+                run.results.all().delete()
+                run.status = 'pending'
+                run.processed = 0
+                run.save(update_fields=['status', 'processed'])
+                _launch_run_worker(run.id)
+
         # Expose rows during pending/processing so the UI is not blank for long LLM runs
         results_data = _run_results_json(run) if run.results.exists() else []
         return JsonResponse({
@@ -189,18 +246,12 @@ def run_status(request, run_id):
 def rescore_run(request, run_id):
     try:
         run = MatchRun.objects.get(id=run_id)
-        # Clear bad extraction cache on all resumes so they get re-extracted
-        run.resumes.update(raw_text='')
-        # Reset run state
         run.results.all().delete()
         run.status = 'pending'
         run.processed = 0
         run.save(update_fields=['status', 'processed'])
 
-        import threading
-        from matcherapp.apps.matching.services import process_match_run
-        t = threading.Thread(target=process_match_run, args=(run.id,), daemon=True)
-        t.start()
+        _launch_run_worker(run.id)
 
         return JsonResponse({'message': 'Re-scoring started.', 'run_id': run.id})
     except MatchRun.DoesNotExist:

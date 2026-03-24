@@ -19,14 +19,14 @@
             </div>
         </div>
         <div class="px-5 py-4 text-sm text-text-body leading-relaxed space-y-2">
-            <p>Replace static regex skill extraction with a graph-grounded approach:</p>
+            <p>ESCO ontology adjacency is live for D1 and D3 scoring — missing skills trigger an LLM tool call when absent from the graph. Remaining work to complete the full knowledge-graph vision:</p>
             <ul class="list-disc list-inside text-xs text-text-disabled space-y-1 ml-2">
-                <li>LLM extracts candidate skill mentions → normalised to ESCO concept URIs</li>
-                <li>Graph traversal finds same-level occupations and adjacent skills with configurable hop penalty</li>
-                <li>Scoring uses graph distance as partial credit rather than binary match</li>
-                <li>Enables "Python → NumPy → pandas → data wrangling" semantic chains without hard-coding synonyms</li>
+                <li>LLM extracts candidate skill mentions → normalised to ESCO concept URIs at extraction time (currently done ad-hoc via <code class="bg-background-dust px-1 py-0.5 rounded font-mono">canonicalize_skill</code>)</li>
+                <li>Multi-hop graph traversal beyond one level (e.g. "Python → NumPy → pandas → data wrangling" chains)</li>
+                <li>Configurable hop penalty schedule instead of a single 0.7× factor</li>
+                <li>Persist ESCO graph locally as RDF (rdflib) to remove SPARQL endpoint dependency</li>
             </ul>
-            <p class="text-xs text-text-disabled mt-1 italic">Effort: ~2 weeks. Requires ESCO SPARQL endpoint or local RDF graph (rdflib). Impact: highest — fixes false negatives on equivalent technologies.</p>
+            <p class="text-xs text-text-disabled mt-1 italic">Effort: ~1 week. Impact: fixes false negatives on equivalent technologies across all domains.</p>
         </div>
     </div>
 
@@ -81,11 +81,11 @@
             </div>
         </div>
         <div class="px-5 py-4 text-sm text-text-body leading-relaxed space-y-2">
-            <p>LLM costs accumulate fast at scale. Needed controls:</p>
+            <p>The two-stage LLM scorer (gpt-4o-mini extraction + gpt-4o scoring) and the agentic D2/verification passes accumulate cost quickly at scale. Needed controls:</p>
             <ul class="list-disc list-inside text-xs text-text-disabled space-y-1 ml-2">
-                <li>Token count logged per resume per stage (extraction, scoring, explanation)</li>
+                <li>Token count logged per resume per stage (extraction, scoring, D2 agent, verification retry)</li>
                 <li>Per-organisation monthly budget cap with soft warning + hard cutoff</li>
-                <li>Automatic fallback to deterministic scoring when budget exhausted</li>
+                <li>Automatic fallback to deterministic scoring when budget exhausted (fallback path already exists)</li>
                 <li>Cost breakdown surfaced in the dashboard per run</li>
             </ul>
             <p class="text-xs text-text-disabled mt-1 italic"><code class="bg-background-dust px-1 py-0.5 rounded font-mono">extras/cost_tracker.py</code> has the accounting logic — needs DB model and per-run association.</p>
@@ -105,9 +105,9 @@
             <p>Close the loop between recruiter decisions and model quality:</p>
             <ul class="list-disc list-inside text-xs text-text-disabled space-y-1 ml-2">
                 <li>Thumbs up/down on candidate cards stored as relevance signals</li>
-                <li>Recruiter final decision (interviewed / hired / rejected) appended to golden dataset</li>
+                <li>Recruiter final decision (interviewed / hired / rejected) appended to <code class="bg-background-dust px-1 py-0.5 rounded font-mono">golden_dataset.jsonl</code></li>
                 <li>Periodic re-evaluation of nDCG against accumulated labels surfaces model drift</li>
-                <li>Fine-tune LLM judge prompts or re-weight dimensions using feedback signal</li>
+                <li>Fine-tune few-shot examples or re-weight dimensions using accumulated feedback</li>
             </ul>
             <p class="text-xs text-text-disabled mt-1 italic"><code class="bg-background-dust px-1 py-0.5 rounded font-mono">extras/feedback.py</code> is the starting point.</p>
         </div>
@@ -119,18 +119,20 @@
             <span class="text-xs font-bold text-white bg-primary-main px-2.5 py-1 rounded-full">6</span>
             <div>
                 <h2 class="text-sm font-semibold text-text-dark">Parameter Tuning</h2>
-                <p class="text-xs text-text-disabled mt-0.5">Optimize α blend weight and dimension weights against golden labels</p>
+                <p class="text-xs text-text-disabled mt-0.5">Optimize blend weight, few-shot examples, and role presets against golden labels</p>
             </div>
         </div>
         <div class="px-5 py-4 text-sm text-text-body leading-relaxed space-y-2">
-            <p>Current weights are set heuristically. With enough golden labels, tune via grid search or Bayesian optimization:</p>
+            <p>Role-adaptive dimension weight presets (Junior/Mid/Senior/Staff/Executive) and a custom weight override UI are already live. Remaining tuning work:</p>
             <ul class="list-disc list-inside text-xs text-text-disabled space-y-1 ml-2">
-                <li><strong class="text-text-body">α (cross-encoder blend)</strong> — currently empirical; should be tuned per domain (tech vs. finance vs. healthcare)</li>
-                <li><strong class="text-text-body">D1–D4 dimension weights</strong> — 0.40/0.35/0.15/0.10 reflects general hiring priorities; role-type-specific weights will improve nDCG</li>
-                <li><strong class="text-text-body">RRF k constant</strong> — k=60 is the standard default; lower k rewards top-ranked results more aggressively</li>
-                <li>Run ablation study after each tuning iteration to track nDCG@3 and MRR on golden dataset</li>
+                <li><strong class="text-text-body">α (cross-encoder blend, currently 0.50)</strong> — tune per domain (tech vs. finance vs. healthcare) once golden labels exist per vertical</li>
+                <li><strong class="text-text-body">Role preset weights</strong> — presets are heuristic; grid search or Bayesian optimisation against per-role golden subsets will improve nDCG</li>
+                <li><strong class="text-text-body">Few-shot example selection</strong> — add Healthcare, Legal, and Product verticals to the domain-specific few-shot bank</li>
+                <li><strong class="text-text-body">RRF k constant (currently 60)</strong> — lower k rewards top-ranked results more aggressively; tune after retrieval-stage ablation</li>
+                <li><strong class="text-text-body">CE_TOP_PERCENT (currently 0.50)</strong> — increasing to 0.75 may improve recall at the cost of latency</li>
+                <li>Run ablation study after each tuning iteration to track nDCG@3 and MRR on the golden dataset</li>
             </ul>
-            <p class="text-xs text-text-disabled mt-1 italic">Effort: ~1 day once golden dataset has 50+ labelled pairs. The ablation page gives immediate feedback.</p>
+            <p class="text-xs text-text-disabled mt-1 italic">Effort: ~1 day per vertical once golden dataset has 50+ labelled pairs. The Ablation page gives immediate feedback.</p>
         </div>
     </div>
 
@@ -145,10 +147,10 @@
         </div>
         <div class="px-5 py-4 text-sm text-text-body leading-relaxed space-y-2">
             <ul class="list-disc list-inside text-xs text-text-disabled space-y-1 ml-2">
-                <li>Replace <code class="bg-background-dust px-1 py-0.5 rounded font-mono">threading.Thread</code> with Celery + Redis for durable background jobs</li>
-                <li>Postgres for all state (replace SQLite) — needed for multi-worker deployments</li>
+                <li>Replace <code class="bg-background-dust px-1 py-0.5 rounded font-mono">threading.Thread</code> with Celery + Redis for durable background jobs — currently a daemon thread fires per run with no retry on crash</li>
+                <li>Postgres for all state (replace SQLite) — required for multi-worker deployments and concurrent rescoring</li>
                 <li>S3 / object storage for resume files instead of local FS</li>
-                <li>Rate limiting on API endpoints (django-ratelimit)</li>
+                <li>Rate limiting on API endpoints (django-ratelimit) — especially <code class="bg-background-dust px-1 py-0.5 rounded font-mono">start_run</code> and <code class="bg-background-dust px-1 py-0.5 rounded font-mono">rescore_run</code></li>
                 <li>SSE or WebSocket for real-time progress instead of client polling</li>
             </ul>
         </div>

@@ -350,15 +350,15 @@ class MCPServer:
         """Read a resource by URI."""
         uri = params.get("uri", "")
         if uri == "matching://config":
-            from src.config import (W_HARD_SKILLS, W_EXPERIENCE_CONTEXT,
-                                    W_TRANSFERABILITY, W_CONSTRAINTS, LLM_PROVIDER)
+            from src.config import LLM_PROVIDER
+            from src.scoring.scorer import W_SKILLS, W_SENIORITY, W_DOMAIN, W_CONSTRAINTS
             return {"contents": [{
                 "uri": uri, "mimeType": "application/json",
                 "text": json.dumps({
                     "weights": {
-                        "hard_skills": W_HARD_SKILLS,
-                        "experience_context": W_EXPERIENCE_CONTEXT,
-                        "transferability": W_TRANSFERABILITY,
+                        "hard_skills": W_SKILLS,
+                        "experience_context": W_SENIORITY,
+                        "transferability": W_DOMAIN,
                         "constraints": W_CONSTRAINTS,
                     },
                     "llm_provider": LLM_PROVIDER,
@@ -386,7 +386,7 @@ class MCPServer:
                         "generates recruiter-facing rationale with evidence citations."}]}
 
     def exec_submit_feedback(self, args: dict) -> dict:
-        from src.integration.feedback import RecruiterFeedback, FeedbackStore
+        from extras.feedback import RecruiterFeedback, FeedbackStore
         store = FeedbackStore()
         fb = RecruiterFeedback(
             job_id=args.get("jd_id", ""),
@@ -402,14 +402,14 @@ class MCPServer:
         return {"content": [{"type": "text", "text": f"Feedback recorded: {fid}"}]}
 
     def exec_run_bias_audit(self, args: dict) -> dict:
-        from src.evaluation.compliance import generate_bias_audit_report
+        from extras.compliance import generate_bias_audit_report
         report = generate_bias_audit_report()
         return {"content": [{"type": "text",
                 "text": f"Bias audit generated. Compliant: {report.compliant}. "
                         f"Recommendations: {'; '.join(report.recommendations[:2])}"}]}
 
     def exec_get_audit_log(self, args: dict) -> dict:
-        from src.evaluation.compliance import load_audit_history
+        from extras.compliance import load_audit_history
         records = load_audit_history()
         limit = args.get("limit", 50)
         return {"content": [{"type": "text",

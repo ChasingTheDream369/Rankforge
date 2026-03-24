@@ -1,7 +1,12 @@
-"""OpenAI LLM client — extraction, scoring, tool-calling. OpenAI only."""
+"""OpenAI LLM client — extraction, scoring, tool-calling. OpenAI only.
+
+Uses a thread-safe singleton client so TCP+TLS connections are reused
+across the dozens of API calls a single run makes.
+"""
 
 import json
 import re
+import threading
 from typing import Optional
 
 from src.config import (
@@ -9,10 +14,23 @@ from src.config import (
     EXTRACTION_MODEL, SCORING_MODEL,
 )
 
+_client = None
+_client_lock = threading.Lock()
+
+
+def get_openai_client():
+    """Return a shared OpenAI client (thread-safe lazy singleton)."""
+    global _client
+    if _client is None:
+        with _client_lock:
+            if _client is None:
+                from openai import OpenAI
+                _client = OpenAI(api_key=OPENAI_API_KEY)
+    return _client
+
 
 def call_openai(prompt: str, model: str, max_tokens: int = 1000, system: str = "") -> Optional[str]:
-    from openai import OpenAI
-    client = OpenAI(api_key=OPENAI_API_KEY)
+    client = get_openai_client()
     msgs = []
     if system:
         msgs.append({"role": "system", "content": system})

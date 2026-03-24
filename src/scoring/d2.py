@@ -161,9 +161,8 @@ def compute_d2_from_profiles(jd_profile: dict, resume_profile: dict) -> tuple:
 
 
 def _call_d2_agent_openai(prompt: str, system: str) -> Optional[str]:
-    from openai import OpenAI
-    from src.config import OPENAI_API_KEY
-    client = OpenAI(api_key=OPENAI_API_KEY)
+    from src.scoring.llm_client import get_openai_client
+    client = get_openai_client()
     msgs = [{"role": "system", "content": system}, {"role": "user", "content": prompt}]
     for _ in range(8):
         resp = client.chat.completions.create(

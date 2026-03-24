@@ -24,9 +24,9 @@ def _execute_extraction_tool(name: str, args: dict) -> str:
 def _call_extraction_with_tools(prompt: str, system: str, max_tokens: int = 800) -> Optional[str]:
     if not has_llm():
         return None
-    from openai import OpenAI
-    from src.config import OPENAI_API_KEY, OPENAI_TEMPERATURE
-    client = OpenAI(api_key=OPENAI_API_KEY)
+    from src.config import OPENAI_TEMPERATURE
+    from src.scoring.llm_client import get_openai_client
+    client = get_openai_client()
     msgs = [{"role": "system", "content": system}, {"role": "user", "content": prompt}]
     for _ in range(8):
         resp = client.chat.completions.create(

@@ -16,9 +16,10 @@ An AI-powered resume screening system built as a proof-of-concept (POC) for ente
 6. [Challenges Overcome & Solutions](#challenges-overcome--solutions)
 7. [Future Steps & Production Roadmap](#future-steps--production-roadmap)
 8. [Setup & Usage](#setup--usage)
-9. [Project Structure](#project-structure)
-10. [Known Limitations](#known-limitations)
-11. [References](#references)
+9. [Testing](#testing)
+10. [Project Structure](#project-structure)
+11. [Known Limitations](#known-limitations)
+12. [References](#references)
 
 ---
 
@@ -511,6 +512,55 @@ python ablation.py --jd data/job_descriptions/senior_backend_finpay.txt --resume
 # Tests
 python -m pytest tests/test_all.py -v
 ```
+
+---
+
+## Testing
+
+The project ships a `pytest`-based test suite (`tests/test_all.py`) with **~75 unit and integration tests** across **13 test classes**. The suite is designed to run without an `OPENAI_API_KEY` — every LLM-dependent path either stubs gracefully or uses the deterministic fallback, so CI stays free.
+
+### Running the Suite
+
+```bash
+# Run all tests with verbose output
+python -m pytest tests/test_all.py -v
+
+# Run a single test class
+python -m pytest tests/test_all.py::TestOntology -v
+
+# Stop on first failure
+python -m pytest tests/test_all.py -x
+```
+
+### Coverage by Area
+
+| Test Class | What It Verifies |
+|------------|-----------------|
+| `TestOntology` | Canonical alias mapping (k8s→kubernetes, golang→go), multi-word skill extraction, no false positives on non-technical text |
+| `TestSkillOverlap` | Exact, adjacent (rabbitmq≈kafka), and group-level (java≈python) matching; empty-JD edge case; regex fallback with experience-year extraction |
+| `TestInjectionDetection` | Prompt injection patterns (`ignore instructions`, score manipulation, HTML comment overrides), clean-text pass-through, injection stripping |
+| `TestInvisibleText` | Zero-width character removal and count; clean-text baseline |
+| `TestHomoglyphs` | Cyrillic→Latin normalisation; substitution count |
+| `TestJDDuplication` | High n-gram overlap detection (ratio > 0.3); unrelated content near-zero baseline |
+| `TestFullSanitize` | End-to-end adversarial document (injections + invisible text + keyword stuffing) flagged with ≥2 flags and penalty > 0.2; clean resume passes with penalty < 0.15 |
+| `TestBaseScore` | Sigmoid boundary conditions (±5 logit, zero → 0.5, extreme ±100 saturation); strict (0, 1) bounds |
+| `TestSkillPenalty` | No-missing multiplier = 1.0; single critical miss reduces multiplier; non-critical miss no penalty; three critical misses compounds to ~0.85³ |
+| `TestFinalScore` | Score always in [0, 1]; adversarial penalty reduces score vs clean baseline; strong logit + full match > 0.9 |
+| `TestRecommendation` | STRONG_MATCH ≥ 0.70/HIGH, NO_MATCH < 0.20, PARTIAL_MATCH mid-range |
+| `TestNDCG / TestMRR / TestPrecision / TestSpearman / TestBiasAudit` | Metric correctness: perfect/worst/all-zeros nDCG; MRR rank-1/2/none/partial; Precision@k extremes; Spearman ρ = ±1.0; impact ratio equal-rates and four-fifths violation |
+| `TestExtractor` | Format detection by extension; `.txt` and `.tex` verbatim extraction; `FileNotFoundError` on missing files; all expected extensions registered; image OCR smoke test (skipped if Tesseract absent) |
+| `TestIsResumeGate` | Gate type-safety and fail-open behaviour for empty text, research-paper snippets, and financial-report snippets when LLM is unconfigured |
+| `TestAblationResumeSet` | `data/ablation_resumes/` directory existence and non-empty; `resume15.tex` extracts ≥ 200 chars; adversarial/non-resume labels are 0.0; best candidate label ≥ 0.85 in golden dataset |
+| `TestContracts` | `MatchResult` and `ThreatReport` safe defaults; `SkillEvidence.to_dict()` field serialisation |
+
+### Development Workflow
+
+When contributing a new module or modifying an existing one:
+
+1. **Add tests** in `tests/test_all.py` under the relevant class, or create a new class following the existing naming convention.
+2. **Run the suite** before committing — `python -m pytest tests/test_all.py -v` should pass in full (or skip where optional deps are absent).
+3. **LLM-dependent paths** — guard with `if LLM_PROVIDER` or `pytest.skip(...)` so the suite stays runnable without an API key.
+4. **Ablation and evaluation scripts** (`ablation.py`, `score_ablation_resumes.py`) are not part of the automated test suite; run them manually when adding new golden labels or changing retrieval logic.
 
 ---
 

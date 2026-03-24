@@ -57,9 +57,10 @@ class RetrievalEngine:
         self.last_ce_scores = {}
         self.last_ce_logits = {}  # raw logits before sigmoid
 
-        # Cached query embedding for get_stage_scores (avoids N extra API calls per search)
+        # Cached per-query results for get_stage_scores (avoids N extra API/BM25 calls)
         self._cached_query: str | None = None
         self._cached_query_emb: np.ndarray | None = None
+        self._cached_bm25_scores: np.ndarray | None = None
 
         # Embedding provider
         self.embed_provider = None  # "openai" | "sentence-transformers" | "tfidf"
@@ -247,23 +248,29 @@ class RetrievalEngine:
         return self.last_ce_logits.get(doc_id, NO_CE_LOGIT)
 
     def get_stage_scores(self, query: str, doc_id: str) -> dict:
-        """Get per-stage scores for a specific document (for explainability)."""
+        """Get per-stage scores for a specific document (for explainability).
+        Caches BM25 and dense scores per query so calling N times is O(N) not O(N^2)."""
         idx = self.doc_ids.index(doc_id) if doc_id in self.doc_ids else -1
         if idx < 0:
             return {}
 
-        bm25_scores = self.bm25.get_scores(tokenize(query))
-        if self.embed_provider in ("openai", "sentence-transformers") and self.dense_embeddings is not None:
-            if self._cached_query != query:
-                self._cached_query = query
+        if self._cached_query != query:
+            self._cached_query = query
+            self._cached_bm25_scores = self.bm25.get_scores(tokenize(query))
+            if self.embed_provider in ("openai", "sentence-transformers") and self.dense_embeddings is not None:
                 self._cached_query_emb = self.embed_query(query)
-            q_emb = self._cached_query_emb
-            dense_scores = np.dot(self.dense_embeddings, q_emb.T).flatten()
+            else:
+                self._cached_query_emb = None
+
+        bm25_score = float(self._cached_bm25_scores[idx]) if self._cached_bm25_scores is not None else 0.0
+
+        if self._cached_query_emb is not None and self.dense_embeddings is not None:
+            dense_score = float(np.dot(self.dense_embeddings[idx], self._cached_query_emb.flatten()))
         else:
-            dense_scores = np.zeros(len(self.doc_ids))
+            dense_score = 0.0
 
         return {
-            "bm25": round(float(bm25_scores[idx]), 4),
-            "dense": round(float(dense_scores[idx]), 4),
+            "bm25": round(bm25_score, 4),
+            "dense": round(dense_score, 4),
             "embed_provider": self.embed_provider,
         }

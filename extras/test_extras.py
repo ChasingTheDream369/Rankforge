@@ -8,12 +8,12 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.evaluation.compliance import (
+from extras.compliance import (
     compute_hash, compute_selection_rates, compute_impact_ratios,
     check_four_fifths_rule, generate_bias_audit_report, AuditRecord,
     create_audit_record, verify_reproducibility, compute_config_hash,
 )
-from src.integration.mcp_server import MCPServer, TOOL_REGISTRY, RESOURCE_REGISTRY
+from extras.mcp_server import MCPServer, TOOL_REGISTRY, RESOURCE_REGISTRY
 from src.retrieval.index_store import IndexStore, compute_corpus_hash
 from src.contracts import MatchResult, ThreatReport, MatchRationale
 
