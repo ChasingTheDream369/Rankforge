@@ -773,3 +773,4 @@ resume_matcher/
 8. **O\*NET** — occupational skill importance weights.
 9. **Lightcast Open Skills** — 32K skills from labor market data; emerging skill coverage.
 10. **Amazon AI Hiring (2014–2018)** — bias replication; motivation for feedback-as-context design (Phase 4).
+11. **Development tooling & research notes** — Coding assistance: **Claude** (Opus family) for implementation; background synthesis and document drafting: **Gemini** (Deep Research). Planning and web-app iteration: **Cursor**. Supplementary research doc (Google Docs): [Research / background notes](https://docs.google.com/document/d/15gUtTeAlMTYfr2o9PBxHZsNHMi6unQTplhsS5evo-Sw/edit?usp=sharing).
