@@ -41,17 +41,19 @@ Several tensions drive the design:
 **Inputs:** job description + resumes (PDF, DOCX, image, LaTeX, plain text, ZIP).  
 **Outputs:** ranked list with per-dimension breakdowns, strengths/gaps where available, confidence, and threat/sanitizer flags.
 
-**Pipeline in short:**
+**Pipeline in short**
 
-1. **Ingest & sanitize** — extract text; run adversarial detectors; optional non-resume gate.
-2. **Retrieve** — BM25 + dense embeddings, fused with **RRF**; shortlist for deeper scoring.
-3. **Re-rank** — cross-encoder on a top fraction of the pool.
-4. **Score** — structured D1–D4 (ontology- and tool-grounded where configured) plus narrative layer where LLMs are enabled.
-5. **Return** — ranked table and per-candidate detail for inspection.
+1. **Ingest & sanitize** — MIME-aware extraction (PDF, DOCX, images via OCR, LaTeX, HTML strip, etc.); **seven** adversarial detectors (prompt injection, invisible text, homoglyphs, JD duplication, keyword stuffing, experience inflation, credential overload); optional **non-resume gate** on a text prefix; penalties feed the final score multiplier.  
+2. **Retrieve** — **BM25** and a **dense bi-encoder** run in parallel; ranked lists are fused with **RRF** (k=60) into one shortlist so both exact tokens and paraphrases influence who moves forward.  
+3. **Re-rank** — **Cross-encoder** scores the **top fraction** of the RRF pool (configurable **`CE_TOP_PERCENT`** in `src/config.py`); the rest still get a **rank-derived** logit so every row has a relevance signal for the dim/CE blend without full pairwise CE on the whole set.  
+4. **Score** — **D1–D4** on structured profiles: **D1** skills via **ontology tiers** (exact → adjacent → group) on top of evidence levels (BUILT_WITH / USED / LISTED); **D2** seniority via signals + agent/tools or deterministic fallback; **D3** domain via canonical labels and **`ADJACENT_DOMAINS`** before optional LLM fallback; **D4** hard-constraint checklist; where LLMs are on, the judge adds **narrative** (rationale, strengths/gaps) while published dimension numbers stay **grounded** in those layers.  
+5. **Return** — ranked table, CSV export path, and **per-candidate** detail (dimensions, skill evidence rows, retrieval diagnostics, threat flags).
 
-### Taking ahead
+### Planned work
 
-The **next wave** is principled **calibration**: joint tuning of dimension weights, CE blend, and retrieval hyperparameters on **golden + adversarial** suites, plus production hardening (queueing, storage, rate limits, compliance hooks)—spelled out under [Future Steps & Production Roadmap](docs/reference.md#future-steps--production-roadmap). Literature notes and citations live in the [extended reference](docs/reference.md#research-alignment).
+Calibration will require **joint estimation** of **dimension weights**, the **cross-encoder blend** (α), and **retrieval** hyperparameters on **golden** and **adversarial** corpora, together with **production hardening** (durable job queues, storage, rate limits, and compliance-oriented controls). A concise treatment appears under [Future Steps & Production Roadmap](docs/reference.md#future-steps--production-roadmap).
+
+The **skills** and **domain** layers are intended to move from the present ESCO-style **alias and adjacency** representation toward a **graph** with **multi-hop relations** and **stronger normalization**, so that **D1** and **D3** remain traceable as coverage increases. **D4** should, where practical, use the **same conceptual schema** (e.g. licensure, clearance, and location as typed entities rather than unconstrained strings) so constraint evaluation stays aligned with skill and domain grounding. Background, optional tooling notes, and citations are in the [extended reference](docs/reference.md#research-alignment) and [References](docs/reference.md#references).
 
 ### Context (architecture & narrative)
 
