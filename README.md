@@ -19,7 +19,9 @@ An AI-powered resume screening system built as a proof-of-concept (POC) for ente
 9. [Testing](#testing)
 10. [Project Structure](#project-structure)
 11. [Known Limitations](#known-limitations)
-12. [References](#references)
+12. [Research alignment & literature notes](#research-alignment)
+13. [References](#references)
+14. [Acknowledgements](#acknowledgements)
 
 ---
 
@@ -779,9 +781,18 @@ resume_matcher/
 | Cross-encoder re-ranking | `ms-marco-MiniLM-L-6-v2` |
 | LLM-as-Judge | Two-stage, gpt-4o-mini + gpt-4o, temp=0 |
 | 4D scoring schema | D1 skills / D2 seniority / D3 domain / D4 constraints |
-| ESCO ontology | `src/ingestion/ontology.py` |
+| ESCO ontology — partial coverage; to be extended later; included as a base for explainability | `src/ingestion/ontology.py` |
 | Evaluation metrics | nDCG, MRR, P@k, Spearman, impact_ratio |
 | Agentic retry | 1 bounded re-score on LOW confidence |
+
+### Literature review & working notes (author)
+
+Problem framing and literature survey for this project were developed across two working Google Docs (iterated in parallel; together they formed the hybrid basis for the design). **Primary links:**
+
+- [Literature / background notes (1)](https://docs.google.com/document/d/1q2nIq1jjj6TZWj34VNzcHCo-4lkws7abH68tE6d485Q/edit?usp=sharing)
+- [Literature / background notes (2)](https://docs.google.com/document/d/1eIZ9NAsMdAaO7I4zIptqpkLbZVVAf5BWZ6XVRTC2KBU/edit?usp=sharing)
+
+For **which tools** assisted research vs coding vs the web app, see [Acknowledgements](#acknowledgements) (Claude, Gemini, Cursor, OpenAI runtime).
 
 ---
 
