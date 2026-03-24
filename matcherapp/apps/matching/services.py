@@ -1,6 +1,5 @@
 import hashlib
 import sys
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional, Tuple
 
 from django.conf import settings
@@ -10,7 +9,6 @@ _project_root = str(settings.BASE_DIR)
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
-MAX_SCORING_WORKERS = 4
 
 
 def _extract_text(resume):
@@ -196,8 +194,7 @@ def process_match_run(match_run_id):
             run.processed = processed_count
             run.save(update_fields=['processed'])
 
-        # ── Phase 3b: Score concurrently, write each as it finishes ───────
-        scorable = []
+        # ── Phase 3b: Score sequentially, save + update progress after each ─
         for resume in resumes:
             if resume.id in dup_resume_ids:
                 continue
@@ -208,61 +205,49 @@ def process_match_run(match_run_id):
                 from src.contracts import ThreatReport
                 threat = ThreatReport(resume_id=rid)
             ce_logit = ce_logits.get(rid, 0.0)
-            scorable.append((resume, rid, cleaned, ce_logit, threat))
 
-        workers = min(MAX_SCORING_WORKERS, len(scorable)) if scorable else 1
-
-        with ThreadPoolExecutor(max_workers=workers) as executor:
-            futures = {}
-            for resume, rid, cleaned, ce_logit, threat in scorable:
-                f = executor.submit(
-                    _score_single_resume,
+            try:
+                scored, threat = _score_single_resume(
                     jd_text, cleaned, ce_logit, threat, n,
                     jd_profile, custom_weights,
                 )
-                futures[f] = (resume, rid)
+                base_stage = stage_scores_by_rid.get(rid, {})
+                for k, v in base_stage.items():
+                    scored[k] = v
+                MatchResult.objects.create(
+                    match_run=run,
+                    resume=resume,
+                    final_score=scored['final_score'],
+                    confidence=scored['confidence'],
+                    recommendation=scored['recommendation'],
+                    d1_skills=scored['d1_skills'],
+                    d2_seniority=scored['d2_seniority'],
+                    d3_domain=scored['d3_domain'],
+                    d4_constraints=scored['d4_constraints'],
+                    dim_composite=scored['dim_composite'],
+                    ce_sigmoid=scored['ce_sigmoid'],
+                    ce_weight_used=scored['ce_weight'],
+                    scoring_mode=scored['mode'],
+                    strengths=scored.get('strengths', []),
+                    gaps=scored.get('gaps', []),
+                    rationale=scored.get('rationale', ''),
+                    skill_detail=scored.get('skill_detail', {}),
+                    seniority_detail=scored.get('seniority_detail', {}),
+                    domain_detail=scored.get('domain_detail', {}),
+                    constraint_detail=scored.get('constraint_detail', []),
+                    stage_scores=scored,
+                    threat_level=threat.threat_level,
+                    adversarial_penalty=threat.total_penalty,
+                    threat_flags=threat.flags if hasattr(threat, 'flags') else [],
+                )
+            except Exception as e:
+                print(f"Error scoring {resume.name}: {e}")
+                import traceback
+                traceback.print_exc()
 
-            for f in as_completed(futures):
-                resume, rid = futures[f]
-                try:
-                    scored, threat = f.result()
-                    base_stage = stage_scores_by_rid.get(rid, {})
-                    for k, v in base_stage.items():
-                        scored[k] = v
-                    MatchResult.objects.create(
-                        match_run=run,
-                        resume=resume,
-                        final_score=scored['final_score'],
-                        confidence=scored['confidence'],
-                        recommendation=scored['recommendation'],
-                        d1_skills=scored['d1_skills'],
-                        d2_seniority=scored['d2_seniority'],
-                        d3_domain=scored['d3_domain'],
-                        d4_constraints=scored['d4_constraints'],
-                        dim_composite=scored['dim_composite'],
-                        ce_sigmoid=scored['ce_sigmoid'],
-                        ce_weight_used=scored['ce_weight'],
-                        scoring_mode=scored['mode'],
-                        strengths=scored.get('strengths', []),
-                        gaps=scored.get('gaps', []),
-                        rationale=scored.get('rationale', ''),
-                        skill_detail=scored.get('skill_detail', {}),
-                        seniority_detail=scored.get('seniority_detail', {}),
-                        domain_detail=scored.get('domain_detail', {}),
-                        constraint_detail=scored.get('constraint_detail', []),
-                        stage_scores=scored,
-                        threat_level=threat.threat_level,
-                        adversarial_penalty=threat.total_penalty,
-                        threat_flags=threat.flags if hasattr(threat, 'flags') else [],
-                    )
-                except Exception as e:
-                    print(f"Error scoring {resume.name}: {e}")
-                    import traceback
-                    traceback.print_exc()
-
-                processed_count += 1
-                run.processed = processed_count
-                run.save(update_fields=['processed'])
+            processed_count += 1
+            run.processed = processed_count
+            run.save(update_fields=['processed'])
 
         # ── Assign ranks ──────────────────────────────────────────────────
         results = list(run.results.order_by('-final_score'))
