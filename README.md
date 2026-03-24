@@ -15,7 +15,7 @@ An AI-powered resume screening system built as a proof-of-concept (POC) for ente
 5. [Performance Evaluation](#performance-evaluation)
 6. [Challenges Overcome & Solutions](#challenges-overcome--solutions)
 7. [Future Steps & Production Roadmap](#future-steps--production-roadmap)
-8. [Setup & Usage](#setup--usage)
+8. [Setup & Usage](#setup--usage) — [UI walkthrough & screenshots](#web-ui-walkthrough-rankforge--resume-matcher-screenshots)
 9. [Testing](#testing)
 10. [Project Structure](#project-structure)
 11. [Known Limitations](#known-limitations)
@@ -501,6 +501,41 @@ python manage.py runserver
 Visit `http://127.0.0.1:8000` — log in, go to **New Run**, paste JD, upload resumes (up to 50; ZIP supported). On *New Run* you can also select a **scoring mode** (Auto / LLM / Deterministic) and optionally set **custom dimension weights** (D1–D4 percentages).
 
 Processing runs in a background subprocess (`manage.py process_run <id>`); the run-detail page auto-polls for progress and streams partial results.
+
+#### Web UI walkthrough (RankForge / Resume Matcher screenshots)
+
+The following matches what the Django app shows end-to-end. **Curated images** live under `docs/rankforge_screens/` as `01.png`–`38.png` (same chronological order as the original `data/All Images RankForge/` captures; copies use ASCII names so links work everywhere).
+
+**Shell layout** — Left nav: **Dashboard**, **New Run**, then **ENGINE** → **Pipeline**, **Test Suite**, **Ablation**, **Roadmap**. Header: dark mode, user, logout.
+
+| What | Highlights |
+|------|------------|
+| **Dashboard** | Summary cards (total runs, resumes, avg top score, last run status). **Recent runs** table: job title, status (Complete / Processing), resume count, mode (**Auto** vs **Llm**), created time. **+ New Matching Run** shortcut. |
+| **New Run** | JD **Title** + **Job Description**; **Resumes** drop zone (PDF, DOCX, PNG, LaTeX, ZIP — note in UI: optimized for PDF). **Settings**: scoring mode dropdown (**Auto** = LLM if API key else deterministic; **LLM**; **Deterministic**). **Scoring weight profile** chips: Auto-detect, Junior, Mid-level, Senior, Staff / Lead, Executive, **Custom** — each updates D1–D4 sliders. UI copy: percentages normalize to 100%; **final score blends 50% dimension composite with 50% cross-encoder** (same default as `CE_WEIGHT` in `src/config.py`). **Start Matching Run**. |
+| **Pipeline** (`/pipeline/`) | **L0** — ingestion (`TextExtractor`), ZIP in-memory, up to 50 resumes/run; adversarial **7-detector** sanitizer (injection, invisible text, homoglyphs, JD duplication, keyword density, font-size tricks, non-resume **LLM gate**); HIGH threat → zero score downstream. **L1** — BM25 + dense bi-encoder (OpenAI `text-embedding-3-small` vs local `all-MiniLM-L6-v2`), top-50 each, normalized scores. **L2** — RRF \(k=60\); top pool; **CE_TOP_PERCENT** controls how many get a real cross-encoder vs rank-derived logit (see [Retrieval Formulation](#retrieval-formulation-ce-top-50-rank-wise-full-coverage) above for the current code path). **L3** — cross-encoder re-rank. Second panel: **D1–D4** definitions (BUILT_WITH / USED / LISTED / ABSENT; D2 agent signals; D3 same/adjacent/unrelated; D4 constraints default 1.0 if none), **role-adaptive weight table** (Junior 50/25/15/10 through Executive 25/55/12/8), **final formula** \(\text{final} = (1-\alpha)\,\text{dim} + \alpha\,\sigma(\text{ce\_logit})\) with default \(\alpha=0.5\), LOW-confidence agentic retry + deterministic fallback, ESCO adjacency penalty (e.g. **0.7×** same-level neighbor), and **eval metrics** (nDCG@k, MRR, P@k, Spearman) with a pointer to **Ablation** for toggling stages. |
+| **Test Suite** (`/tests/`) | **Run All Tests**; grouped results mirror `tests/test_all.py` — ontology & skill overlap; injection / invisible / homoglyphs / JD duplication; full sanitize; sigmoid & skill-penalty & final score; recommendation bands; nDCG, MRR, precision, Spearman; bias audit; extractor formats (incl. `.tex`, image OCR smoke); resume gate; ablation dataset smoke; contracts. Typical run: **60+ passed**, a few skipped when optional conditions aren’t met. |
+| **Ablation** (`/ablation/`) | Same five-level study as `ablation.py` / [Performance Evaluation](#performance-evaluation); use the UI for quick iteration without the CLI. |
+| **Roadmap** (`/roadmap/`) | In-app cards expand on [Future Steps](#future-steps--production-roadmap): ESCO normalization + multi-hop graph + local RDF; **compliance** (PII redaction, per-dimension distributions, four-fifths flagging, signed audit store — starts from `extras/compliance.py`); **MCP** (`match_resumes`, `explain_score`, `update_label` — `extras/mcp_server.py`); **cost** caps & per-run token surfacing (`extras/cost_tracker.py`); **HITL** labels → `golden_dataset.jsonl` (`extras/feedback.py`); **parameter tuning** (α, role presets, few-shot verticals, RRF \(k\), `CE_TOP_PERCENT`); **infrastructure** — Celery + Redis instead of daemon threads, Postgres for multi-worker state, S3/object storage for files, `django-ratelimit` on high-traffic endpoints, SSE/WebSockets instead of polling-only UX. |
+
+**Run & candidate views** — Run header: job title, run id, resume count, timestamp; actions **Export CSV**, **Re-score**, status badge. **Ranked candidates** table: rank, label, **final score**, D1–D4, **confidence**, **recommendation** (e.g. Partial / No / Strong match), **threat**, **Preview** (PDF or text). **Candidate detail**: per-dimension cards with applied weights; breakdown row (**dimension composite**, **cross-encoder sigmoid** × weight, **final**); **LLM rationale**; **Strengths** / **Gaps**; **D1 skill evidence** rows (`exact`, `absent`, `group`, `adjacent`, `llm_fallback`); **D2** leadership / architecture / scale / ownership / years + narrative; **Retrieval stage** fields (BM25, dense, `CE_LOGIT`, JSON blobs for skills, seniority, domain). **Non-resume gate**: document rejected before scoring → **0.00** final score, LOW confidence, rationale in UI matches gate behaviour.
+
+**Reference figures** (subset; full set is `docs/rankforge_screens/01.png` … `38.png`):
+
+![Dashboard — runs overview](docs/rankforge_screens/01.png)
+
+![New Run — JD, uploads, scoring mode and weight presets](docs/rankforge_screens/03.png)
+
+![Pipeline — L0–L3 retrieval narrative](docs/rankforge_screens/11.png)
+
+![Pipeline — D1–D4, role weights, final formula, ESCO & metrics](docs/rankforge_screens/12.png)
+
+![Test Suite — grouped pytest results](docs/rankforge_screens/13.png)
+
+![Roadmap — production and research next steps](docs/rankforge_screens/24.png)
+
+![Run detail — ranked candidates](docs/rankforge_screens/27.png)
+
+![Candidate detail — dimensions, CE blend, rationale](docs/rankforge_screens/30.png)
 
 #### Tool Pages
 
