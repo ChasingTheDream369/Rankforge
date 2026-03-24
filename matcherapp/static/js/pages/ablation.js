@@ -86,8 +86,18 @@ const applyState = state => {
 
     if (state.status === 'running') {
         spinner().removeClass('hidden');
-        statusLabel().text('Running ablation study…');
         runBtn().prop('disabled', true).addClass('opacity-50 cursor-not-allowed');
+        const elapsed = typeof state.elapsed_sec === 'number' ? `${state.elapsed_sec}s` : '';
+        const p = state.progress;
+        if (p && p.name) {
+            const step = `Step ${p.step}/${p.total}`;
+            const slowHint = p.step === p.total
+                ? ' — full LLM pipeline (many API calls); this step often takes several minutes.'
+                : '';
+            statusLabel().text(`${step}: ${p.name}${slowHint}${elapsed ? ` · ${elapsed} elapsed` : ''}`);
+        } else {
+            statusLabel().text(`Starting ablation…${elapsed ? ` (${elapsed} elapsed)` : ''}`);
+        }
         return;
     }
 

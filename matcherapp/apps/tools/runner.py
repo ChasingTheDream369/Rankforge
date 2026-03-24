@@ -7,14 +7,27 @@ import re
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 
 from django.conf import settings
 
 # ── Shared state dicts ────────────────────────────────────────────────────────
 _test_state  = {"status": "idle",  "results": None, "error": None}
-_ablat_state = {"status": "idle",  "results": None, "error": None}
+_ablat_state = {
+    "status": "idle",
+    "results": None,
+    "error": None,
+    "progress": None,  # {"step": int, "total": int, "name": str} while running
+    "started_at": None,  # time.time() when run started
+}
 _lock = threading.Lock()
+
+
+def _set_ablation_progress(step: int, total: int, name: str) -> None:
+    with _lock:
+        if _ablat_state["status"] == "running":
+            _ablat_state["progress"] = {"step": step, "total": total, "name": name}
 
 
 # ── Test runner ───────────────────────────────────────────────────────────────
@@ -131,7 +144,15 @@ def run_ablation_bg():
     with _lock:
         if _ablat_state["status"] == "running":
             return
-        _ablat_state.update({"status": "running", "results": None, "error": None})
+        _ablat_state.update(
+            {
+                "status": "running",
+                "results": None,
+                "error": None,
+                "progress": None,
+                "started_at": time.time(),
+            }
+        )
 
     def _worker():
         try:
@@ -164,7 +185,9 @@ def run_ablation_bg():
             ]
 
             rows = []
-            for name, fn in approaches:
+            n_ap = len(approaches)
+            for i, (name, fn) in enumerate(approaches, start=1):
+                _set_ablation_progress(i, n_ap, name)
                 try:
                     ranked_ids, scores = fn(jd_text, resumes)
                     metrics = abl.evaluate_ranking(ranked_ids, labels) if labels else {}
@@ -175,16 +198,23 @@ def run_ablation_bg():
                                  "scores": {}, "error": str(e)})
 
             with _lock:
-                _ablat_state["status"]  = "done"
+                _ablat_state["status"] = "done"
                 _ablat_state["results"] = {"rows": rows, "jd_id": jd_id, "has_labels": bool(labels)}
+                _ablat_state["progress"] = None
+                _ablat_state["started_at"] = None
         except Exception as exc:
             with _lock:
                 _ablat_state["status"] = "error"
                 _ablat_state["error"]  = str(exc)
+                _ablat_state["progress"] = None
+                _ablat_state["started_at"] = None
 
     threading.Thread(target=_worker, daemon=True).start()
 
 
 def get_ablation_state() -> dict:
     with _lock:
-        return dict(_ablat_state)
+        out = dict(_ablat_state)
+    if out.get("status") == "running" and out.get("started_at"):
+        out["elapsed_sec"] = int(time.time() - out["started_at"])
+    return out

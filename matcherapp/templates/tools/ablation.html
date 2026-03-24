@@ -6,6 +6,10 @@
     <div>
         <h1 class="text-text-dark text-2xl font-semibold">Ablation Study</h1>
         <p class="text-text-disabled text-sm mt-0.5">Progressive improvement comparison across 5 retrieval approaches</p>
+        <p class="text-text-disabled text-xs mt-2 max-w-3xl leading-relaxed">
+            Steps 1–4 are local (TF-IDF, BM25, embeddings, cross-encoder) and usually finish in under a few minutes.
+            <strong class="text-text-body font-medium">Step 5</strong> runs the full matching pipeline: one profile-extraction and one scoring LLM call per resume (plus the JD). This study uses only <code class="text-xs bg-background-dust px-1 rounded">data/ablation_resumes/</code> (~15 files), so expect on the order of <strong class="text-text-body font-medium">5–10 minutes</strong> with a cold cache — not frozen. Status shows which step is running and elapsed time.
+        </p>
     </div>
     <button id="run-ablation-btn"
         class="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-main text-white text-sm font-medium hover:bg-primary-dark transition-colors">

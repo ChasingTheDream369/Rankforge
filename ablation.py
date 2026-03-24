@@ -96,12 +96,13 @@ def load_data(jd_path=None, resume_paths=None):
                 if text and len(text.strip()) > 50:
                     resumes[p2.stem] = {"text": text, "name": p2.stem}
     else:
-        # Load sample resumes (txt) + ablation_resumes (any format), pick JD by best label coverage
+        # Default: use ONLY data/ablation_resumes/ when it has extractable files (small pool, e.g. 15
+        # PDFs/TeX) so UI/CLI ablation finishes in minutes. Falls back to data/resumes/*.txt + ablation
+        # merges only if that folder is missing or empty.
         from src.ingestion.extractor import extract_directory
 
         jd_files, txt_resumes = load_sample_data()
 
-        # Scan data/ablation_resumes/ if it exists
         ablation_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "ablation_resumes")
         ablation_resumes = {}
         if os.path.isdir(ablation_dir):
@@ -109,30 +110,48 @@ def load_data(jd_path=None, resume_paths=None):
             for stem, text in extracted.items():
                 ablation_resumes[stem] = {"text": text, "name": stem}
 
-        all_resumes = {**txt_resumes, **ablation_resumes}
-
-        if os.path.exists(GOLDEN_DATASET_PATH):
-            golden = _load_jsonl(GOLDEN_DATASET_PATH)
-            best_jd = max(
-                (k for k in jd_files if k in golden),
-                key=lambda k: len(set(golden[k].keys()) & set(all_resumes.keys())),
-                default=None,
-            )
-            jd_id = best_jd or list(jd_files.keys())[0]
+        if ablation_resumes:
+            resumes = ablation_resumes
+            resume_keys = set(resumes.keys())
+            if os.path.exists(GOLDEN_DATASET_PATH):
+                golden = _load_jsonl(GOLDEN_DATASET_PATH)
+                candidates = [k for k in jd_files if k in golden]
+                jd_id = (
+                    max(
+                        candidates,
+                        key=lambda k: len(set(golden[k].keys()) & resume_keys),
+                    )
+                    if candidates
+                    else None
+                ) or list(jd_files.keys())[0]
+            else:
+                jd_id = list(jd_files.keys())[0]
         else:
-            jd_id = list(jd_files.keys())[0]
+            all_resumes = {**txt_resumes, **ablation_resumes}
+            if os.path.exists(GOLDEN_DATASET_PATH):
+                golden = _load_jsonl(GOLDEN_DATASET_PATH)
+                best_jd = max(
+                    (k for k in jd_files if k in golden),
+                    key=lambda k: len(set(golden[k].keys()) & set(all_resumes.keys())),
+                    default=None,
+                )
+                jd_id = best_jd or list(jd_files.keys())[0]
+            else:
+                jd_id = list(jd_files.keys())[0]
+            resumes = all_resumes
 
         jd_text = jd_files[jd_id]
-        resumes = all_resumes
 
     # Load labels and attach to resume dicts so pipeline.py can use them
     labels = {}
     if os.path.exists(GOLDEN_DATASET_PATH):
         golden = _load_jsonl(GOLDEN_DATASET_PATH)
-        labels = golden.get(jd_id, {})
-        for rid, lv in labels.items():
+        raw_labels = golden.get(jd_id, {})
+        for rid, lv in raw_labels.items():
             if rid in resumes:
                 resumes[rid]["label"] = lv
+        # Only grade resumes in this corpus (e.g. 15 ablation files vs larger golden block)
+        labels = {k: v for k, v in raw_labels.items() if k in resumes}
 
     if not labels:
         print(f"  WARNING: No golden labels found for JD '{jd_id}' in {GOLDEN_DATASET_PATH}")

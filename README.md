@@ -76,7 +76,9 @@ A **Python-based matching engine** that:
 | **RRF fusion (k=60)** | Parameter-free; no score calibration across retrievers; robust to scale differences between BM25 and cosine similarity | Fixed k may not be optimal for all corpus sizes |
 | **Cross-encoder rerank** | Highest quality relevance signal for [JD, resume] pairs; catches inflated language (“used Python once” vs “led Python backend”) | Expensive: O(n) pairwise calls; applied only to top 50% of RRF pool |
 | **4D + CE scoring** | Explainable: D1 (skills), D2 (seniority), D3 (domain), D4 (constraints) + CE blend. JD seniority presets + optional per-run custom weights; CE weight from config. | Hand-tuned defaults; **planned:** joint fit of dimension weights, CE α, and retrieval hyperparameters via regression on labeled data |
-| **Ontology (ESCO-style)** | Skill alias normalisation (e.g. “rabbitmq” ≈ “kafka” as adjacent); partial credit for related skills | Ontology coverage limited; LLM fallback when skill not in graph |
+| **Ontology (curated skill graph + domain pairs)** | **Grounding in use today:** skills are matched in order **exact → adjacent → group**, with **lower tier multipliers** on top of evidence level (BUILT_WITH / USED / LISTED). Domains use **canonical labels** plus **`ADJACENT_DOMAINS`** before any LLM. | Off-graph cases use optional **LLM tool fallbacks** (`D1_LLM_FALLBACK`, `D3_LLM_FALLBACK` in `src/config.py`). |
+
+**LLM vs deterministic (by dimension).** **D1 / D3** are **ontology-first**; an LLM tool runs **only** when exact / adjacent / (for D1) group coverage does not resolve the skill or domain. **D2** inverts that pattern when the agent is enabled: the **LLM orchestrates** calls into **deterministic** tool implementations on resume evidence, and **falls back** to fully deterministic seniority-from-profiles if the agent path fails. The scoring LLM still produces rationale and strengths/gaps; the **D1–D4 values that enter the final blend** are the **merged, grounded** profile scores (not unconstrained judge floats).
 
 ### Alternatives Considered
 
@@ -161,10 +163,11 @@ Job Description  +  Resumes (PDF / DOCX / PNG / LaTeX / TXT / ZIP)
        │                      │ ce_logit per resume
        │                      ▼
        │         ┌─────────────────────────────────────────────┐
-       │         │  STAGE 2  LLM SCORING (gpt-4o, temp=0)      │
-       │         │  Few-shot grounded examples                │
-       │         │  D1–D4 overwritten by deterministic        │
-       │         │  modules (ontology, regex, agents)          │
+       │         │  STAGE 2  PROFILE D1–D4 + JUDGE LLM       │
+       │         │  Compute D1–D4 from profiles first       │
+       │         │  (ontology tiers, D2 agent/tools, D4)     │
+       │         │  Judge LLM: rationale / strengths / gaps    │
+       │         │  Published D1–D4 = grounded merge (above)  │
        │         │  Agentic retry: if confidence=LOW → 1       │
        │         │  bounded re-score (verify_score)            │
        │         └─────────────────────────────────────────────┘
@@ -218,9 +221,9 @@ The final score is built in clearly separated layers. If we change a layer tomor
 
 - **Default weights** \((w_1..w_4)\): base **40% / 35% / 15% / 10%** for D1–D4, overridden by **JD seniority** presets in `scorer.py` (`ROLE_WEIGHTS`: junior, mid, senior, staff, …).
 - **Custom (web):** On *New Run*, users can enable “Custom dimension importance” and enter percentages for Skills / Seniority / Domain / Constraints; values are **normalized to sum 100%** and stored on `MatchRun.scoring_config`. If disabled, only defaults apply.
-- **D1 (Skills):** Per required skill: BUILT_WITH=1.0, USED=0.7, LISTED=0.3, ABSENT=0.0. Ontology + weighted average.
-- **D2 (Seniority):** Leadership, architecture, scale, ownership + years; agent/tools or regex.
-- **D3 (Domain):** Same / adjacent / unrelated; ontology + LLM fallback when needed.
+- **D1 (Skills):** Per required skill: BUILT_WITH=1.0, USED=0.7, LISTED=0.3, ABSENT=0.0. Ontology match order **exact → adjacent → group** with tiered credit at each step; core skills weighted higher in the average.
+- **D2 (Seniority):** Leadership, architecture, scale, ownership + years; **LLM agent → deterministic tools** on evidence when enabled, else deterministic-from-profiles.
+- **D3 (Domain):** Canonical match → **`ADJACENT_DOMAINS`** pair → LLM tool only if still unresolved.
 - **D4 (Constraints):** met=1.0, partial=0.5, not met=0.0; average.
 
 **Layer 2 — CE weight:** \(\alpha = \texttt{CE\_WEIGHT}\) (default **0.5**).
@@ -278,9 +281,9 @@ The final score is built in clearly separated layers. If we change a layer tomor
 
 ### Profile Normalisation
 
-- **Skills:** Ontology alias mapping (e.g. “Golang” → “Go”); adjacency (e.g. rabbitmq ≈ kafka)
-- **Domains:** Canonical mapping; `ADJACENT_DOMAINS` in schema
-- **Seniority:** Normalised to schema vocabulary; deterministic tool implementations for D2 agent
+- **Skills:** Ontology alias mapping (e.g. “Golang” → “Go”); **exact / adjacent / group** tiers for D1 with decreasing credit; adjacency (e.g. rabbitmq ≈ kafka).
+- **Domains:** Canonical mapping; `ADJACENT_DOMAINS` for adjacent industry pairs before LLM fallback.
+- **Seniority:** Normalised to schema vocabulary; D2 agent calls **deterministic** assessors on evidence text.
 
 ### Deterministic Fallback (No LLM)
 
@@ -334,9 +337,29 @@ Label keys must match file stems exactly (case-sensitive). The ablation script a
 | **Spearman ρ** | Rank correlation between predicted and gold ordering |
 | **Impact Ratio** | NYC LL144 bias audit — selection rate per group / max rate |
 
+<a id="ablation-latest-ema-mar-2026"></a>
+
+### Latest ablation — real resume dataset (25 March 2026)
+
+**Setup:** Labeled **real resumes** from the project corpus, JD key **`ema_enterprise_swe`** in `data/golden_dataset.jsonl`, run through the **current** RankForge **Ablation** ladder (same five steps as the UI: sparse baselines → hybrid RRF → cross-encoder → **full pipeline** with profile extraction, curated **ontology-grounded** D1/D3 tiers, D2 agent/tools when enabled, merged D1–D4, and agentic verification on LOW confidence). This table is the **most recent recorded snapshot** for that configuration.
+
+| Approach | nDCG@3 | nDCG@5 | nDCG@10 | MRR | P@3 | P@5 | Spearman ρ | TOP-1† |
+|----------|-------:|-------:|--------:|----:|----:|----:|-----------:|-------:|
+| TF-IDF only | 0.229 | 0.471 | 0.667 | 0.250 | 0.000 | 0.200 | 0.304 | 0.093 |
+| TF-IDF + BM25 | 0.436 | 0.480 | 0.584 | 0.500 | 0.333 | 0.200 | 0.214 | 0.032 |
+| BM25 + Dense + RRF | 0.738 | 0.726 | 0.712 | 0.333 | 0.333 | 0.400 | 0.329 | 0.032 |
+| + Cross-encoder | 0.304 | 0.444 | 0.643 | 0.200 | 0.000 | 0.200 | 0.389 | 0.158 |
+| Hybrid + Agentic (Ontology Grounding) | 0.498 | 0.690 | **0.786** | 0.250 | 0.000 | 0.400 | **0.454** | **0.720** |
+
+† **TOP-1** in the UI is the **model score at rank 1** after that approach (how sharp the list head is), not “accuracy@1” vs gold.
+
+**Reading this run:** On this JD, **retrieval-heavy stages** (notably BM25 + dense + RRF) can win **early-cutoff** metrics (e.g. nDCG@3, MRR, P@3) while **reordering the shortlist**; the **full stack** then trades some of that head metric for **better graded ordering through the top 10** and stronger **Spearman ρ**. **Stage 5 achieves the best nDCG@10 and Spearman here**, which is what we emphasize for product narrative. **Dimension weights, CE blend, RRF *k*, and pool cut** are still deliberately conservative and are **planned for joint tuning** on golden labels (see [Future Steps](#future-steps--production-roadmap))—this snapshot is meant to show the **intended direction**: ontology + structured scoring **recovering list quality** where it matters for shortlist review, not that every column is simultaneously maximal.
+
+**Why nDCG@10 is primary here (and not MRR / P@k alone):** As in the architecture write-up (`docs/architecture.tex`), **nDCG** uses **graded** relevance (e.g. 1.0 / 0.5 / 0.0) and a **logarithmic position discount**: pushing a strong candidate down to rank 10 hurts more than pushing them to rank 2. That matches **how TA uses a ranked shortlist**—several slots get eyeballs, not only position 1. **MRR** is dominated by the **first** relevant hit, so it can look excellent or poor when a single rank moves, even if the **rest of the top 10** improved. **P@k** treats relevance as **binary within k** and ignores **how much** better one “good” resume is than another, so it can disagree with nDCG when labels are graded. **Spearman ρ** is a useful **global** ordering check but is **noisier on small labeled pools**; **nDCG@10** stays tied to the **decision-critical head** of the list. We still report MRR, P@k, and Spearman as **secondary** diagnostics, not as competing “headline” goals.
+
 ### Ablation study — five levels (FinPay JD, labeled `data/resumes/`)
 
-`ablation.py` scores the same pool with **five stacked approaches**: (1) TF-IDF only → (2) TF-IDF + BM25 (RRF) → (3) BM25 + bi-encoder (RRF) → (4) + cross-encoder rerank → (5) **full pipeline** (hybrid retrieval + CE + ontology / 4D scoring as in `src/pipeline.py`). Metrics are vs `senior_backend_finpay` in `golden_dataset.jsonl`.
+`ablation.py` scores the same pool with **five stacked approaches**: (1) TF-IDF only → (2) TF-IDF + BM25 (RRF) → (3) BM25 + bi-encoder (RRF) → (4) + cross-encoder rerank → (5) **full pipeline** (hybrid retrieval + CE + ontology / 4D scoring as in `src/pipeline.py`). Metrics are vs `senior_backend_finpay` in `golden_dataset.jsonl`. For the **most recent real-resume snapshot** (`ema_enterprise_swe`, 25 March 2026), see [Latest ablation](#ablation-latest-ema-mar-2026) above.
 
 **Measured run** (regenerate anytime; committed snapshot: `evaluation/ablation_results.json`):
 
@@ -366,7 +389,8 @@ python ablation.py --jd data/job_descriptions/senior_backend_finpay.txt --resume
 ### Running Evaluation
 
 ```bash
-# Ablation: auto-picks JD in golden_dataset with best label coverage (resumes + ablation folder when present)
+# Ablation: default uses only data/ablation_resumes/ when that folder has files (fast UI-sized run);
+# picks JD in golden_dataset with best label overlap on those stems. Use --jd/--resumes for FinPay table.
 python ablation.py
 
 # FinPay + labeled txt corpus (recommended for the table above)
@@ -504,7 +528,7 @@ Processing runs in a background subprocess (`manage.py process_run <id>`); the r
 
 #### Web UI walkthrough (RankForge / Resume Matcher screenshots)
 
-The following matches what the Django app shows end-to-end. **Curated images** live under `docs/rankforge_screens/` as `01.png`–`38.png` (same chronological order as the original `data/All Images RankForge/` captures; copies use ASCII names so links work everywhere).
+The following matches what the Django app shows end-to-end. **Curated images** live under `docs/rankforge_screens/` as descriptive kebab-case `.png` names (dashboard, new-run flows, pipeline, test suite, terminals, roadmap, run/candidate views, ablation) so paths read clearly in docs and diffs.
 
 **Shell layout** — Left nav: **Dashboard**, **New Run**, then **ENGINE** → **Pipeline**, **Test Suite**, **Ablation**, **Roadmap**. Header: dark mode, user, logout.
 
@@ -519,23 +543,23 @@ The following matches what the Django app shows end-to-end. **Curated images** l
 
 **Run & candidate views** — Run header: job title, run id, resume count, timestamp; actions **Export CSV**, **Re-score**, status badge. **Ranked candidates** table: rank, label, **final score**, D1–D4, **confidence**, **recommendation** (e.g. Partial / No / Strong match), **threat**, **Preview** (PDF or text). **Candidate detail**: per-dimension cards with applied weights; breakdown row (**dimension composite**, **cross-encoder sigmoid** × weight, **final**); **LLM rationale**; **Strengths** / **Gaps**; **D1 skill evidence** rows (`exact`, `absent`, `group`, `adjacent`, `llm_fallback`); **D2** leadership / architecture / scale / ownership / years + narrative; **Retrieval stage** fields (BM25, dense, `CE_LOGIT`, JSON blobs for skills, seniority, domain). **Non-resume gate**: document rejected before scoring → **0.00** final score, LOW confidence, rationale in UI matches gate behaviour.
 
-**Reference figures** (subset; full set is `docs/rankforge_screens/01.png` … `38.png`):
+**Reference figures** (subset; see `docs/rankforge_screens/*.png` for the full gallery):
 
-![Dashboard — runs overview](docs/rankforge_screens/01.png)
+![Dashboard — runs overview](docs/rankforge_screens/dashboard-overview-recent-runs.png)
 
-![New Run — JD, uploads, scoring mode and weight presets](docs/rankforge_screens/03.png)
+![New Run — JD, uploads, scoring mode and weight presets](docs/rankforge_screens/new-run-settings-auto-detect.png)
 
-![Pipeline — L0–L3 retrieval narrative](docs/rankforge_screens/11.png)
+![Pipeline — L0–L3 retrieval narrative](docs/rankforge_screens/pipeline-layers-l0-l3.png)
 
-![Pipeline — D1–D4, role weights, final formula, ESCO & metrics](docs/rankforge_screens/12.png)
+![Pipeline — D1–D4, role weights, final formula, ESCO & metrics](docs/rankforge_screens/pipeline-dimensions-role-weights-esco-eval.png)
 
-![Test Suite — grouped pytest results](docs/rankforge_screens/13.png)
+![Test Suite — grouped pytest results](docs/rankforge_screens/test-suite-ontology-skill-overlap.png)
 
-![Roadmap — production and research next steps](docs/rankforge_screens/24.png)
+![Roadmap — production and research next steps](docs/rankforge_screens/roadmap-items-1-through-3.png)
 
-![Run detail — ranked candidates](docs/rankforge_screens/27.png)
+![Run detail — ranked candidates](docs/rankforge_screens/run-ranked-candidates-table.png)
 
-![Candidate detail — dimensions, CE blend, rationale](docs/rankforge_screens/30.png)
+![Candidate detail — dimensions, CE blend, rationale](docs/rankforge_screens/candidate-detail-dimensions-score.png)
 
 #### Tool Pages
 
@@ -773,4 +797,20 @@ resume_matcher/
 8. **O\*NET** — occupational skill importance weights.
 9. **Lightcast Open Skills** — 32K skills from labor market data; emerging skill coverage.
 10. **Amazon AI Hiring (2014–2018)** — bias replication; motivation for feedback-as-context design (Phase 4).
-11. **Development tooling & research notes** — Coding assistance: **Claude** (Opus family) for implementation; background synthesis and document drafting: **Gemini** (Deep Research). Planning and web-app iteration: **Cursor**. Supplementary research doc (Google Docs): [Research / background notes](https://docs.google.com/document/d/15gUtTeAlMTYfr2o9PBxHZsNHMi6unQTplhsS5evo-Sw/edit?usp=sharing).
+
+---
+
+## Acknowledgements
+
+Transparent credit for AI-assisted research and engineering (aligned with the architecture document and presentation materials):
+
+| Role | Tool / source |
+|------|----------------|
+| **Reasoning & coding / algorithmic ground** | **Anthropic Claude 4.6 Opus** — primary assistant for implementation logic, structure, and problem-solving. |
+| **Initial background & literature review** | **Google Gemini 3.1** (research-oriented workflows) — early framing and survey of the problem space. Two working Google Docs were iterated in parallel; together they formed the hybrid basis for how the system was conceived: [Literature / background notes (1)](https://docs.google.com/document/d/1q2nIq1jjj6TZWj34VNzcHCo-4lkws7abH68tE6d485Q/edit?usp=sharing) · [Literature / background notes (2)](https://docs.google.com/document/d/1eIZ9NAsMdAaO7I4zIptqpkLbZVVAf5BWZ6XVRTC2KBU/edit?usp=sharing). |
+| **Web app — ideation, planning, implementation** | **Cursor** (Composer) — fast iteration in a stack already familiar to the author: **Django**, **jQuery**, **Tailwind CSS**, vanilla JavaScript, background threading, and lightweight async processing for match runs. |
+| **Architecture & deck copy** | **Claude** again used to summarize and tighten prose from the author’s bullets for the architecture write-up and slides. |
+
+**On repo norms:** There is no single mandatory GitHub standard for listing AI collaborators. A dedicated **Acknowledgements** section in the README (as here), plus matching notes in `docs/architecture.tex` and any slide deck, is a common and transparent pattern. Optional extras some projects use: a short `ACKNOWLEDGEMENTS.md`, `CITATION.cff` for formal citation, or author fields in `pyproject.toml` / paper-style `CITATION.bib` — use whatever your course or employer expects.
+
+The product **scoring** path in code uses **OpenAI** models where configured (`gpt-4o-mini` / `gpt-4o`, embeddings); that runtime dependency is separate from the **authoring** assistants named above.
