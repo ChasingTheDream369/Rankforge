@@ -513,8 +513,7 @@ cp .env.example .env          # then edit .env with your keys
 | `CE_TOP_PERCENT` | % of RRF pool through real CE (0–100, default 50). Rest get RRF-derived logit. |
 | `FAIRNESS_FOUR_FIFTHS_THRESHOLD` | (Optional) NYC LL144-style flag when group impact ratio falls below this value (default `0.8`). Used by `extras/compliance.py`. |
 
-**Security:** API keys must come from environment or `.env` only. Never commit `.env` — copy `.env.example` and fill in your values.
-
+**Security:** API keys must come from environment or `.env` only.  Added above while setting up if possible.
 ### Web UI
 
 ```bash
@@ -524,7 +523,7 @@ python manage.py seed_data          # optional: populate demo JD + resumes
 python manage.py runserver
 ```
 
-Visit `http://127.0.0.1:8000` — log in, go to **New Run**, paste JD, upload resumes (up to 50; ZIP supported). On *New Run* you can also select a **scoring mode** (Auto / LLM / Deterministic) and optionally set **custom dimension weights** (D1–D4 percentages).
+Since this is just localhost and not deplpyed yet, so labelling that here once deployed this will be replaced -> Visit `http://127.0.0.1:8000` — log in, go to **New Run**, paste JD, upload resumes (up to 50; ZIP supported). On *New Run* you can also select a **scoring mode** (Auto / LLM / Deterministic) and optionally set **custom dimension weights** (D1–D4 percentages).
 
 Processing runs in a background subprocess (`manage.py process_run <id>`); the run-detail page auto-polls for progress and streams partial results.
 
@@ -781,7 +780,7 @@ resume_matcher/
 | Cross-encoder re-ranking | `ms-marco-MiniLM-L-6-v2` |
 | LLM-as-Judge | Two-stage, gpt-4o-mini + gpt-4o, temp=0 |
 | 4D scoring schema | D1 skills / D2 seniority / D3 domain / D4 constraints |
-| ESCO ontology — partial coverage; to be extended later; included as a base for explainability | `src/ingestion/ontology.py` |
+| ESCO ontology (partial — to be extended later; included as a base for explainability) | `src/ingestion/ontology.py` |
 | Evaluation metrics | nDCG, MRR, P@k, Spearman, impact_ratio |
 | Agentic retry | 1 bounded re-score on LOW confidence |
 
