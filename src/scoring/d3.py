@@ -7,6 +7,8 @@ from src.config import D3_LLM_FALLBACK, EXTRACTION_MODEL
 from src.scoring.extraction_schema import ADJACENT_DOMAINS, canonicalize_domain
 from src.scoring.llm_client import call_openai, parse_json, has_llm
 
+from matcherapp.apps.system_prompts.dimensions import D3_DOMAIN_FALLBACK_SYSTEM, D3_DOMAIN_FALLBACK_USER
+
 _D3_FALLBACK_TOOL = {
     "type": "function",
     "function": {
@@ -47,9 +49,7 @@ def compute_d3_from_profiles(jd_profile: dict, resume_profile: dict) -> Optional
 def _call_d3_llm_fallback(jd_profile: dict, resume_profile: dict) -> tuple:
     jd_domain = str(jd_profile.get("domain", "") or "other")
     resume_domains = resume_profile.get("domains") or ["other"]
-    prompt = f"""Score domain fit (0.0–1.0): JD domain={jd_domain}, Resume domains={resume_domains}.
-Rules: 1.0=same industry; 0.6–0.8=adjacent/transferable; 0.3–0.5=some overlap; 0.0–0.2=unrelated.
-You MUST call submit_domain_fit_assessment(score, reason) with your assessment."""
+    prompt = D3_DOMAIN_FALLBACK_USER.format(jd_domain=jd_domain, resume_domains=resume_domains)
     if not has_llm():
         return (0.2, "LLM fallback failed; default unrelated")
     try:
@@ -62,7 +62,7 @@ def _call_d3_fallback_openai(prompt: str) -> tuple:
     from openai import OpenAI
     from src.config import OPENAI_API_KEY
     client = OpenAI(api_key=OPENAI_API_KEY)
-    msgs = [{"role": "system", "content": "Score domain fit. You MUST call submit_domain_fit_assessment with score and reason."}, {"role": "user", "content": prompt}]
+    msgs = [{"role": "system", "content": D3_DOMAIN_FALLBACK_SYSTEM}, {"role": "user", "content": prompt}]
     for _ in range(3):
         resp = client.chat.completions.create(
             model=EXTRACTION_MODEL, messages=msgs, max_tokens=150, temperature=0,

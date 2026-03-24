@@ -5,6 +5,13 @@ from typing import Optional
 
 from src.scoring.llm_client import call_extraction_llm, parse_json, has_llm
 
+from matcherapp.apps.system_prompts.extraction import (
+    JD_PROMPT,
+    JD_SYSTEM,
+    RESUME_PROMPT,
+    RESUME_SYSTEM,
+)
+
 _EXTRACTION_TOOLS = [
     {"type": "function", "function": {"name": "canonicalize_skill", "description": "Get canonical form of a skill. Call for EVERY skill.", "parameters": {"type": "object", "properties": {"skill_name": {"type": "string"}}, "required": ["skill_name"]}}},
     {"type": "function", "function": {"name": "canonicalize_domain", "description": "Get canonical domain. Returns: fintech|enterprise_saas|ai_ml|healthcare|platform_devops|ecommerce|other", "parameters": {"type": "object", "properties": {"domain_name": {"type": "string"}}, "required": ["domain_name"]}}},
@@ -46,33 +53,14 @@ def _call_extraction_with_tools(prompt: str, system: str, max_tokens: int = 800)
     return None
 
 
-_JD_SYSTEM = "You are a structured extraction assistant. Extract ONLY what is explicitly stated. Return valid JSON only, no markdown."
-_JD_PROMPT = """Extract a structured profile from this job description.
-
-JOB DESCRIPTION:
-{jd_text}
-
-Return JSON: {{"required_skills": [{{"name": "...", "importance": "core" or "nice"}}], "years_required": 0, "domain": "fintech|enterprise_saas|ai_ml|healthcare|platform_devops|ecommerce|other", "seniority": "junior|mid|senior|staff|lead|executive", "hard_constraints": []}}
-Max 10 skills."""
-
-_RESUME_SYSTEM = "You are a structured extraction assistant. Extract ONLY what is explicitly written. Evidence must be VERBATIM quotes from the resume. Return valid JSON only, no markdown."
-_RESUME_PROMPT = """Extract a structured profile from this resume.
-
-RESUME:
-{resume_text}
-
-Return JSON: {{"skills": [{{"name": "...", "level": "BUILT_WITH"|"USED"|"LISTED", "evidence": "verbatim quote"}}], "total_years": 0, "domains": [], "seniority_signals": {{"leadership": "quote or null", "architecture": "quote or null", "scale": "quote or null", "ownership": "quote or null"}}, "highlights": []}}
-Evidence MUST be verbatim substrings from the resume text."""
-
-
 def extract_jd_profile(jd_text: str) -> Optional[dict]:
     """Two attempts: transient parse/API glitches should not force raw-text scoring."""
     from src.scoring.extraction_schema import normalize_jd_profile
     for attempt in range(2):
         cap = 4000 if attempt else 2500
         tokens = 1600 if attempt else 1200
-        prompt = _JD_PROMPT.format(jd_text=jd_text[:cap])
-        raw = call_extraction_llm(prompt, tokens, _JD_SYSTEM)
+        prompt = JD_PROMPT.format(jd_text=jd_text[:cap])
+        raw = call_extraction_llm(prompt, tokens, JD_SYSTEM)
         result = parse_json(raw)
         if result and "required_skills" in result and "domain" in result:
             return normalize_jd_profile(result)
@@ -85,8 +73,8 @@ def extract_resume_profile(resume_text: str) -> Optional[dict]:
     for attempt in range(2):
         cap = 8000 if attempt else 4000
         tokens = 2500 if attempt else 2000
-        prompt = _RESUME_PROMPT.format(resume_text=resume_text[:cap])
-        raw = call_extraction_llm(prompt, tokens, _RESUME_SYSTEM)
+        prompt = RESUME_PROMPT.format(resume_text=resume_text[:cap])
+        raw = call_extraction_llm(prompt, tokens, RESUME_SYSTEM)
         result = parse_json(raw)
         if result and "skills" in result and "total_years" in result:
             src = resume_text[:6000 if attempt else 3000]

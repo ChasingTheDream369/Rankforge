@@ -28,6 +28,8 @@ import json
 from typing import Set, Dict, Optional, List
 
 from src.config import LLM_PROVIDER, OPENAI_API_KEY, OPENAI_MODEL, OPENAI_TEMPERATURE
+
+from matcherapp.apps.system_prompts.ontology import EXTRACTION_PROMPT, ONTOLOGY_EXTRACTION_SYSTEM
 # === ESCO Skill Extractor (primary path when available) ===
 
 ESCO_AVAILABLE = False
@@ -292,22 +294,6 @@ def compute_skill_overlap(jd_skills: Set[str], resume_skills: Set[str]) -> dict:
 # === LLM-based structured extraction (richer than ontology alone) ===
 
 
-EXTRACTION_PROMPT = """Extract structured information from this resume/job description text.
-Return ONLY valid JSON — no markdown fences, no preamble:
-{
-  "technical_skills": ["list of specific technical skills, tools, languages, frameworks"],
-  "soft_skills": ["list of soft skills"],
-  "certifications": ["list of certifications like AWS SAA, CISSP, PMP"],
-  "experience_years": <integer of total years, or 0>,
-  "education": ["list of degrees"],
-  "domain": "primary industry domain",
-  "seniority": "junior|mid|senior|lead|executive"
-}
-Map synonyms to canonical forms (e.g., "data ingestion workflows" → "ETL pipelines").
-TEXT:
-"""
-
-
 def parse_llm_json(raw: str) -> Optional[dict]:
     raw = raw.strip()
     raw = re.sub(r'^```(?:json)?\s*', '', raw)
@@ -333,7 +319,7 @@ def extract_skills_llm(text: str) -> Optional[dict]:
             resp = client.chat.completions.create(
                 model=OPENAI_MODEL, temperature=OPENAI_TEMPERATURE,
                 messages=[
-                    {"role": "system", "content": "Extract structured data. Return ONLY valid JSON."},
+                    {"role": "system", "content": ONTOLOGY_EXTRACTION_SYSTEM},
                     {"role": "user", "content": EXTRACTION_PROMPT + text[:4000]}
                 ],
                 response_format={"type": "json_object"}

@@ -7,6 +7,8 @@ from typing import Optional
 from src.config import D2_AGENT_ENABLED, EXTRACTION_MODEL
 from src.scoring.llm_client import parse_json, has_llm
 
+from matcherapp.apps.system_prompts.dimensions import D2_SYSTEM, format_d2_agent_user_message
+
 _D2_WEIGHTS = {"leadership": 0.25, "architecture": 0.25, "scale": 0.20, "ownership": 0.15, "years": 0.15}
 
 _D2_TOOLS = [
@@ -16,14 +18,6 @@ _D2_TOOLS = [
     {"type": "function", "function": {"name": "assess_scale", "description": "Score scale evidence. Strong: N users, TPS, $XM.", "parameters": {"type": "object", "properties": {"evidence": {"type": "string"}}, "required": ["evidence"]}}},
     {"type": "function", "function": {"name": "assess_ownership", "description": "Score ownership evidence. Strong: owned end-to-end.", "parameters": {"type": "object", "properties": {"evidence": {"type": "string"}}, "required": ["evidence"]}}},
 ]
-
-_D2_SYSTEM = (
-    "You are a senior recruiter scoring candidate seniority (D2). "
-    "You MUST call exactly 5 tools: check_years_requirement, assess_leadership, assess_architecture, assess_scale, assess_ownership. "
-    "Use the tool results as the signal scores. D2 = 0.25*L + 0.25*A + 0.20*S + 0.15*O + 0.15*Y. "
-    "Return JSON only: {\"d2_score\": 0.XX, \"signals\": {\"leadership\": 0.X, \"architecture\": 0.X, \"scale\": 0.X, \"ownership\": 0.X, \"years\": 0.X}, \"rationale\": \"one sentence\"}"
-)
-
 
 def _assess_leadership_impl(evidence: str) -> tuple:
     rl = (evidence or "").lower().strip()
@@ -184,16 +178,8 @@ def _call_d2_agent_openai(prompt: str, system: str) -> Optional[str]:
 
 
 def _call_d2_agent(jd_profile: dict, resume_profile: dict) -> Optional[tuple]:
-    prompt = f"""Score this candidate's seniority (D2). You MUST call all 5 tools.
-
-JD_PROFILE:
-{json.dumps(jd_profile, indent=2)}
-
-RESUME_PROFILE:
-{json.dumps(resume_profile, indent=2)}
-
-REQUIRED: check_years_requirement, assess_leadership, assess_architecture, assess_scale, assess_ownership. After ALL 5, return JSON."""
-    raw = _call_d2_agent_openai(prompt, _D2_SYSTEM)
+    prompt = format_d2_agent_user_message(jd_profile, resume_profile)
+    raw = _call_d2_agent_openai(prompt, D2_SYSTEM)
     if not raw:
         return None
     result = parse_json(raw)

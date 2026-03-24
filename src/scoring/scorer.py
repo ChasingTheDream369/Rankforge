@@ -24,6 +24,17 @@ from src.scoring.d3 import compute_d3
 from src.scoring.d4 import compute_d4
 from src.scoring.deterministic import score_deterministic
 
+from matcherapp.apps.system_prompts.scoring import (
+    SCORING_CRITERIA,
+    SCORING_PROMPT,
+    SCORING_SYSTEM,
+    VERIFY_PROMPT,
+    few_shot_for_jd_profile,
+    RESUME_GATE_SYSTEM,
+    RESUME_GATE_USER_LEAD,
+    RESUME_GATE_USER_MID,
+)
+
 # Re-export for external consumers
 __all__ = [
     "extract_jd_profile", "extract_resume_profile",
@@ -89,80 +100,14 @@ def resolve_dimension_weights(
     return get_dimension_weights(jd_profile)
 
 
-# Stage 2 prompts
-_SCORING_SYSTEM = (
-    "You are a senior technical recruiter scoring candidates against job requirements. "
-    "Score based solely on evidence in the profiles. Temperature=0. No creativity. Return valid JSON."
-)
-
-_FEW_SHOT_FINTECH = """## FEW-SHOT EXAMPLES (FinTech / Payments)
-### Example 1 — STRONG_MATCH
-JD_PROFILE: {"required_skills": [{"name": "Go/Python", "importance": "core"}, {"name": "PostgreSQL", "importance": "core"}, {"name": "AWS", "importance": "core"}, {"name": "Kafka", "importance": "core"}, {"name": "payment systems", "importance": "core"}, {"name": "microservices", "importance": "core"}], "years_required": 5, "domain": "fintech/payments", "seniority": "senior"}
-RESUME_PROFILE: {"skills": [{"name": "Go/Python", "level": "BUILT_WITH", "evidence": "payment microservices handling 8000 TPS"}, {"name": "PostgreSQL", "level": "BUILT_WITH", "evidence": "50TB+ data"}, {"name": "Kafka", "level": "BUILT_WITH", "evidence": "event-driven microservices"}, {"name": "AWS", "level": "BUILT_WITH", "evidence": "ECS migration"}, {"name": "ETL/Airflow", "level": "BUILT_WITH", "evidence": "transaction reconciliation"}], "total_years": 7, "domains": ["fintech"], "seniority_signals": {"architecture": "migrated monolith to microservices", "leadership": "mentored 3 junior engineers", "scale": "8000 TPS, 2M+ users"}}
-OUTPUT: {"d1_skills": 0.92, "d2_seniority": 0.88, "d3_domain": 1.0, "d4_constraints": 0.95, "confidence": "HIGH", "recommendation": "STRONG_MATCH", "strengths": ["Built payment microservices at scale"], "gaps": [], "rationale": "Exceptional fit."}
-### Example 2 — NO_MATCH
-JD_PROFILE: {"required_skills": [{"name": "Go/Python", "importance": "core"}, {"name": "PostgreSQL", "importance": "core"}], "years_required": 5, "domain": "fintech", "seniority": "senior"}
-RESUME_PROFILE: {"skills": [{"name": "Kubernetes", "level": "BUILT_WITH", "evidence": "platform engineering"}, {"name": "Go", "level": "LISTED", "evidence": "basic scripting"}], "total_years": 6, "domains": ["devops"], "seniority_signals": {"architecture": "Kubernetes design", "ownership": "infra operations"}}
-OUTPUT: {"d1_skills": 0.25, "d2_seniority": 0.45, "d3_domain": 0.3, "d4_constraints": 0.55, "confidence": "HIGH", "recommendation": "NO_MATCH", "strengths": ["Strong infra"], "gaps": ["No backend product experience"], "rationale": "Platform engineer, not backend."}"""
-
-_FEW_SHOT_AI_ML = """## FEW-SHOT EXAMPLES (AI / ML)
-### Example 1 — STRONG_MATCH
-JD_PROFILE: {"required_skills": [{"name": "Python", "importance": "core"}, {"name": "PyTorch/TensorFlow", "importance": "core"}, {"name": "LLMs", "importance": "core"}, {"name": "RAG pipelines", "importance": "core"}, {"name": "vector databases", "importance": "nice"}], "years_required": 3, "domain": "ai_ml", "seniority": "senior"}
-RESUME_PROFILE: {"skills": [{"name": "Python", "level": "BUILT_WITH", "evidence": "production ML pipelines"}, {"name": "PyTorch", "level": "BUILT_WITH", "evidence": "fine-tuned BERT for NER"}, {"name": "LangChain", "level": "BUILT_WITH", "evidence": "RAG for customer support"}, {"name": "Pinecone", "level": "USED", "evidence": "vector store for retrieval"}], "total_years": 5, "domains": ["ai_ml"], "seniority_signals": {"architecture": "designed RAG architecture", "scale": "10M+ queries/month"}}
-OUTPUT: {"d1_skills": 0.88, "d2_seniority": 0.82, "d3_domain": 1.0, "d4_constraints": 0.9, "confidence": "HIGH", "recommendation": "STRONG_MATCH", "strengths": ["Strong LLM/RAG experience"], "gaps": [], "rationale": "Direct domain and skill match."}
-### Example 2 — PARTIAL_MATCH
-JD_PROFILE: {"required_skills": [{"name": "Python", "importance": "core"}, {"name": "scikit-learn", "importance": "core"}, {"name": "SQL", "importance": "core"}], "years_required": 2, "domain": "ai_ml", "seniority": "mid"}
-RESUME_PROFILE: {"skills": [{"name": "Python", "level": "BUILT_WITH", "evidence": "data analysis scripts"}, {"name": "R", "level": "USED", "evidence": "statistical models"}, {"name": "SQL", "level": "USED", "evidence": "ETL queries"}], "total_years": 3, "domains": ["other"], "seniority_signals": {"ownership": "owned data pipeline"}}
-OUTPUT: {"d1_skills": 0.55, "d2_seniority": 0.5, "d3_domain": 0.4, "d4_constraints": 0.7, "confidence": "MEDIUM", "recommendation": "PARTIAL_MATCH", "strengths": ["Python, SQL"], "gaps": ["No scikit-learn; adjacent domain"], "rationale": "Transferable skills but ML library gap."}"""
-
-
-def _get_few_shot_examples(jd_profile: Optional[dict] = None) -> str:
-    """Select few-shot examples by JD domain; avoid priming AI/ML JDs with only fintech context."""
-    if not jd_profile:
-        return _FEW_SHOT_FINTECH
-    domain = str(jd_profile.get("domain", "")).lower()
-    if "ai" in domain or "ml" in domain or "machine" in domain or "llm" in domain:
-        return _FEW_SHOT_AI_ML
-    return _FEW_SHOT_FINTECH
-
-
-_SCORING_CRITERIA = """
-## SCORING CRITERIA (use for all 4 dimensions)
-
-D1 (Skills, weight 0.40): Match required_skills to resume skills. BUILT_WITH=1.0, USED=0.7, LISTED=0.3, ABSENT=0.0. Core skills weighted higher. D1 = weighted average.
-
-D2 (Seniority, weight 0.35): Leadership (team/mentoring), Architecture (system design), Scale (users/TPS/metrics), Ownership (end-to-end). Use seniority_signals + total_years. 0.0–1.0.
-
-D3 (Domain, weight 0.15): Same domain=1.0, adjacent/transferable=0.5–0.8, unrelated=0.0–0.3. Check jd_profile.domain vs resume_profile.domains.
-
-D4 (Constraints, weight 0.10): Fraction of hard_constraints met. For each item in jd_profile.hard_constraints, check resume (total_years, skills, highlights). met=1.0, partial=0.5, not met=0.0. d4_constraints = average. If hard_constraints empty, use 1.0.
-"""
-
-_SCORING_PROMPT = """{few_shot}
----
-## NOW SCORE THIS CANDIDATE
-JD_PROFILE: {jd_profile_json}
-RESUME_PROFILE: {resume_profile_json}
-{criteria}
-
-Return JSON only: {{"d1_skills": 0.XX, "d2_seniority": 0.XX, "d3_domain": 0.XX, "d4_constraints": 0.XX, "confidence": "HIGH|MEDIUM|LOW", "recommendation": "STRONG_MATCH|GOOD_MATCH|PARTIAL_MATCH|WEAK_MATCH|NO_MATCH", "strengths": [], "gaps": [], "rationale": "..."}}"""
-
-_VERIFY_PROMPT = """You scored with LOW confidence. Review and revise.
-JD_PROFILE: {jd_profile_json}
-RESUME_PROFILE: {resume_profile_json}
-INITIAL: D1={d1:.2f}, D2={d2:.2f}, D3={d3:.2f}, D4={d4:.2f}, {recommendation}
-{criteria}
-Return updated JSON (same schema): {{"d1_skills": 0.XX, "d2_seniority": 0.XX, "d3_domain": 0.XX, "d4_constraints": 0.XX, "confidence": "...", "recommendation": "...", "strengths": [], "gaps": [], "rationale": "..."}}"""
-
-
 def score_profiles(jd_profile: dict, resume_profile: dict) -> Optional[dict]:
-    prompt = _SCORING_PROMPT.format(
-        few_shot=_get_few_shot_examples(jd_profile),
+    prompt = SCORING_PROMPT.format(
+        few_shot=few_shot_for_jd_profile(jd_profile),
         jd_profile_json=json.dumps(jd_profile, separators=(',', ':')),
         resume_profile_json=json.dumps(resume_profile, separators=(',', ':')),
-        criteria=_SCORING_CRITERIA,
+        criteria=SCORING_CRITERIA,
     )
-    raw = call_scoring_llm(prompt, max_tokens=700, system=_SCORING_SYSTEM)
+    raw = call_scoring_llm(prompt, max_tokens=700, system=SCORING_SYSTEM)
     result = parse_json(raw)
     if result and all(k in result for k in ("d1_skills", "d2_seniority", "d3_domain", "d4_constraints")):
         return result
@@ -170,15 +115,15 @@ def score_profiles(jd_profile: dict, resume_profile: dict) -> Optional[dict]:
 
 
 def verify_score(jd_profile: dict, resume_profile: dict, initial: dict) -> Optional[dict]:
-    prompt = _VERIFY_PROMPT.format(
+    prompt = VERIFY_PROMPT.format(
         jd_profile_json=json.dumps(jd_profile, separators=(',', ':')),
         resume_profile_json=json.dumps(resume_profile, separators=(',', ':')),
         d1=initial.get("d1_skills", 0), d2=initial.get("d2_seniority", 0),
         d3=initial.get("d3_domain", 0), d4=initial.get("d4_constraints", 0),
         recommendation=initial.get("recommendation", "?"),
-        criteria=_SCORING_CRITERIA,
+        criteria=SCORING_CRITERIA,
     )
-    raw = call_scoring_llm(prompt, max_tokens=600, system=_SCORING_SYSTEM)
+    raw = call_scoring_llm(prompt, max_tokens=600, system=SCORING_SYSTEM)
     result = parse_json(raw)
     if result and all(k in result for k in ("d1_skills", "d2_seniority", "d3_domain", "d4_constraints")):
         return result
@@ -204,17 +149,12 @@ def is_resume(text: str) -> bool:
 
     from src.scoring.llm_client import call_extraction_llm
 
-    _SYSTEM = "Answer YES or NO only."
-    _PROMPT = (
-        "Does the following text appear to be a professional resume or CV, or does it contain "
-        "typical resume content such as work experience, education, skills, or contact information? "
-        "Answer with exactly one word: YES or NO.\n\nDOCUMENT:\n"
-    )
-
     # Check a larger leading snippet — compressed PDFs need more chars to be representative.
     try:
         snippet = text[:3000]
-        raw = call_extraction_llm(_PROMPT + snippet, max_tokens=5, system=_SYSTEM)
+        raw = call_extraction_llm(
+            RESUME_GATE_USER_LEAD + snippet, max_tokens=5, system=RESUME_GATE_SYSTEM
+        )
         if raw is not None and raw.strip().upper().startswith("YES"):
             return True
 
@@ -223,9 +163,8 @@ def is_resume(text: str) -> bool:
             mid = len(text) // 2
             snippet2 = text[mid: mid + 2000]
             raw2 = call_extraction_llm(
-                "Does the following text contain professional resume content "
-                "(experience, education, skills)? Answer YES or NO only.\n\nTEXT:\n" + snippet2,
-                max_tokens=5, system=_SYSTEM,
+                RESUME_GATE_USER_MID + snippet2,
+                max_tokens=5, system=RESUME_GATE_SYSTEM,
             )
             if raw2 is not None and raw2.strip().upper().startswith("YES"):
                 return True

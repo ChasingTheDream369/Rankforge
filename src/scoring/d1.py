@@ -6,6 +6,8 @@ from typing import Dict, Optional
 from src.config import D1_LLM_FALLBACK, EXTRACTION_MODEL
 from src.scoring.llm_client import parse_json, has_llm
 
+from matcherapp.apps.system_prompts.dimensions import D1_SKILL_FIT_SYSTEM, D1_SKILL_FIT_USER
+
 _D1_EXACT = {"BUILT_WITH": 1.0, "USED": 0.7, "LISTED": 0.3}
 _D1_ADJACENT = {"BUILT_WITH": 0.6, "USED": 0.5, "LISTED": 0.2}
 _D1_GROUP = {"BUILT_WITH": 0.3, "USED": 0.25, "LISTED": 0.1}
@@ -69,8 +71,7 @@ def _call_d1_skill_fit_tool(skill_name: str, resume_profile: dict) -> float:
     )
     highlights = " | ".join((resume_profile.get("highlights") or [])[:5])
     context = f"Skills: {skills_summary[:400]}. Highlights: {highlights[:300]}"
-    prompt = f"""JD requires skill: {skill_name}. Resume context: {context}
-Assess fit 0.0-1.0. You MUST call submit_skill_fit_assessment(score) with your assessment."""
+    prompt = D1_SKILL_FIT_USER.format(skill_name=skill_name, context=context)
     try:
         return _call_d1_fallback_openai(prompt)
     except Exception:
@@ -81,7 +82,7 @@ def _call_d1_fallback_openai(prompt: str) -> float:
     from openai import OpenAI
     from src.config import OPENAI_API_KEY
     client = OpenAI(api_key=OPENAI_API_KEY)
-    msgs = [{"role": "system", "content": "Assess skill fit. You MUST call submit_skill_fit_assessment with your score."}, {"role": "user", "content": prompt}]
+    msgs = [{"role": "system", "content": D1_SKILL_FIT_SYSTEM}, {"role": "user", "content": prompt}]
     for _ in range(3):
         resp = client.chat.completions.create(
             model=EXTRACTION_MODEL, messages=msgs, max_tokens=100, temperature=0,
