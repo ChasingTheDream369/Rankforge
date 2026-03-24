@@ -246,7 +246,7 @@ The final score is built in clearly separated layers. If we change a layer tomor
 | Path | Retrieval | ce_logit | Use Case |
 |------|-----------|----------|----------|
 | **CLI / `demo.py` / `pipeline.py`** | Full hybrid (BM25 + dense + RRF + CE) | Real CE logit from engine | Research, ablation, evaluation |
-| **Django Web UI (`services.py`)** | Hybrid retrieval + CE per run | Real CE logit from `RetrievalEngine` | Production UI; optional custom D1–D4 % on `MatchRun` |
+| **Django Web UI (`services.py`)** | Hybrid retrieval + CE per run | Real CE logit from `RetrievalEngine` | Production UI; custom D1–D4 %, scoring mode, rescore, CSV export |
 
 ---
 
@@ -472,6 +472,7 @@ If a larger, labeled dataset were available, we would:
 ```bash
 python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
+cp .env.example .env          # then edit .env with your keys
 ```
 
 ### Environment Variables
@@ -479,22 +480,52 @@ pip install -r requirements.txt
 | Variable | Notes |
 |----------|-------|
 | `OPENAI_API_KEY` | **Required for LLM scoring.** Set via `.env` or `export`. Without it, deterministic fallback runs. |
-| `CE_TOP_PERCENT` | % of RRF pool through real CE (0–100, default 50). Rest get RRF-derived logit. |
-| `FAIRNESS_FOUR_FIFTHS_THRESHOLD` | (Optional) NYC LL144-style flag when group impact ratio falls below this value (default `0.8`). Used by `extras/compliance.py` when generating bias audits. |
-| `SECRET_KEY` | Django secret (required in production) |
+| `SECRET_KEY` | Django secret (required in production; `.env.example` has placeholder) |
 | `DEBUG` | Set `False` in production |
+| `USE_SQLITE` | `true` (default) → SQLite with WAL; `false` → MySQL via `DB_*` vars below |
+| `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT` | MySQL connection (only when `USE_SQLITE=false`) |
+| `CE_TOP_PERCENT` | % of RRF pool through real CE (0–100, default 50). Rest get RRF-derived logit. |
+| `FAIRNESS_FOUR_FIFTHS_THRESHOLD` | (Optional) NYC LL144-style flag when group impact ratio falls below this value (default `0.8`). Used by `extras/compliance.py`. |
 
-**Security:** API keys must come from environment or `.env` only. Do not commit keys.
+**Security:** API keys must come from environment or `.env` only. Never commit `.env` — copy `.env.example` and fill in your values.
 
 ### Web UI
 
 ```bash
 python manage.py migrate
 python manage.py createsuperuser
+python manage.py seed_data          # optional: populate demo JD + resumes
 python manage.py runserver
 ```
 
-Visit `http://127.0.0.1:8000` — log in, go to **New Run**, paste JD, upload resumes (up to 50; ZIP supported).
+Visit `http://127.0.0.1:8000` — log in, go to **New Run**, paste JD, upload resumes (up to 50; ZIP supported). On *New Run* you can also select a **scoring mode** (Auto / LLM / Deterministic) and optionally set **custom dimension weights** (D1–D4 percentages).
+
+Processing runs in a background subprocess (`manage.py process_run <id>`); the run-detail page auto-polls for progress and streams partial results.
+
+#### Tool Pages
+
+| Page | URL | Purpose |
+|------|-----|---------|
+| Pipeline | `/pipeline/` | Interactive architecture diagram |
+| Roadmap | `/roadmap/` | Future steps / production roadmap |
+| Test Suite | `/tests/` | Run `pytest` from the browser; stream results |
+| Ablation | `/ablation/` | Trigger 5-level ablation study and view results |
+
+#### API Endpoints
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| POST | `/api/matching/start/` | Create job + run, upload resumes (incl. ZIP), spawn worker |
+| GET | `/api/matching/run/<id>/status/` | Poll run progress + partial results (includes dead-worker restart) |
+| GET | `/api/matching/candidate/<id>/` | Full result JSON for a single candidate |
+| GET | `/api/matching/resume/<id>/preview/` | Resume raw text or file URL |
+| POST | `/api/matching/run/<id>/rescore/` | Clear results and re-run the entire match |
+| POST | `/api/matching/result/<id>/rescore/` | Re-score a single candidate |
+| GET | `/api/matching/run/<id>/export/` | CSV export of all results |
+| POST | `/api/tests/run/` | Start background test suite |
+| GET | `/api/tests/status/` | Poll test-suite progress |
+| POST | `/api/ablation/run/` | Start background ablation study |
+| GET | `/api/ablation/status/` | Poll ablation progress |
 
 ### CLI
 
@@ -568,48 +599,93 @@ When contributing a new module or modifying an existing one:
 
 ```
 resume_matcher/
-├── src/                      Core AI pipeline
+├── src/                          Core AI pipeline
 │   ├── ingestion/
-│   │   ├── extractor.py      MIME-first format detection, PDF/DOCX/OCR/HTML
-│   │   ├── sanitizer.py      7 adversarial detectors → ThreatReport
-│   │   └── ontology.py       ESCO skill alias/adjacency
+│   │   ├── extractor.py          MIME-first format detection, PDF/DOCX/OCR/HTML
+│   │   ├── sanitizer.py          7 adversarial detectors → ThreatReport
+│   │   └── ontology.py           ESCO skill alias/adjacency
 │   ├── retrieval/
-│   │   ├── engine.py         BM25 + bi-encoder + RRF + cross-encoder
-│   │   └── index_store.py   Persistent dense (numpy) + BM25 cache
+│   │   ├── engine.py             BM25 + bi-encoder + RRF + cross-encoder
+│   │   └── index_store.py        Persistent dense (numpy) + BM25 cache
 │   ├── scoring/
-│   │   ├── scorer.py         Two-stage LLM + deterministic fallback
-│   │   ├── d1.py – d4.py     Dimension modules (ontology, agents, regex)
-│   │   ├── extraction.py    JD/resume LLM prompts
+│   │   ├── scorer.py             Two-stage LLM + deterministic fallback
+│   │   ├── d1.py – d4.py         Dimension modules (ontology, agents, regex)
+│   │   ├── deterministic.py      Rule-based scoring (no LLM)
+│   │   ├── extraction.py         JD/resume LLM prompts + tool calls
 │   │   ├── extraction_schema.py  Normalisation, evidence validation
-│   │   ├── llm_client.py     OpenAI client
-│   │   └── explainability.py Rationale generation
+│   │   ├── llm_client.py         OpenAI client (extraction vs scoring models)
+│   │   └── explainability.py     Rationale generation
 │   ├── evaluation/
-│   │   └── metrics.py        nDCG, MRR, P@k, Spearman, impact_ratio
-│   ├── pipeline.py           Full orchestrator
-│   ├── contracts.py          MatchResult, ThreatReport, etc.
-│   └── config.py             Constants, model names, weights
+│   │   └── metrics.py            nDCG, MRR, P@k, Spearman, impact_ratio
+│   ├── pipeline.py               Full orchestrator
+│   ├── contracts.py              MatchResult, ThreatReport, etc.
+│   └── config.py                 Constants, model names, weights, env flags
 │
-├── matcherapp/               Django web application
-│   ├── models.py             Job, MatchRun, Resume, MatchResult
-│   ├── apps/matching/        views, api, services
-│   └── apps/tools/           pipeline, ablation, test suite pages
+├── matcherserver/                Django project configuration
+│   ├── settings.py               DB, middleware, dotenv loading
+│   ├── urls.py                   Root URL conf → matcherapp.urls
+│   ├── wsgi.py
+│   └── celery.py                 Celery app (optional async path)
+│
+├── matcherapp/                   Django web application
+│   ├── models.py                 Job, MatchRun, Resume, MatchResult
+│   ├── decorators.py             login_required wrapper
+│   ├── management/commands/
+│   │   ├── process_run.py        Background worker for a single MatchRun
+│   │   └── seed_data.py          Populate demo JD + resumes
+│   ├── apps/
+│   │   ├── auth/                 Login / logout views + URLs
+│   │   ├── matching/
+│   │   │   ├── views.py          Dashboard, new run, run detail, candidate detail
+│   │   │   ├── api.py            REST endpoints (start, status, rescore, export …)
+│   │   │   ├── services.py       process_match_run orchestration
+│   │   │   └── tasks.py          Celery shared_task wrapper
+│   │   └── tools/
+│   │       ├── views.py          Pipeline, roadmap, test-suite, ablation pages + APIs
+│   │       └── runner.py         Background ablation / test-suite runners
+│   ├── templates/
+│   │   ├── base.html
+│   │   ├── auth/login.html
+│   │   ├── matching/             dashboard, new_run, run_detail, candidate_detail
+│   │   ├── tools/                pipeline, roadmap, test_suite, ablation
+│   │   └── components/           navbar, sidebar, dimension_card, score_badge,
+│   │                             resume_preview_modal, line_loader, snackbar
+│   └── static/
+│       ├── css/                  Tailwind input + compiled styles
+│       └── js/                   Per-page modules (dashboard, new_run, run_detail,
+│                                 candidate, ablation, test_suite) + shared utils
 │
 ├── data/
-│   ├── job_descriptions/     Sample JDs
-│   ├── resumes/              Sample txt resumes
-│   ├── ablation_resumes/     PDF, PNG, LaTeX (incl. adversarial)
-│   ├── golden_dataset.jsonl  Human labels
-│   └── index/                Cached embeddings, BM25, profiles
+│   ├── job_descriptions/         Sample JDs
+│   ├── resumes/                  Sample txt resumes (13 labeled)
+│   ├── ablation_resumes/         PDF, PNG, LaTeX (incl. adversarial)
+│   ├── golden_dataset.jsonl      Human labels
+│   └── index/                    Cached embeddings, BM25, profiles
 │
 ├── evaluation/
-│   ├── ablation_results.json Snapshot from ablation.py (FinPay table in README)
-│   └── ablation_scores.json Optional: score_ablation_resumes.py D1–D4 dump
-├── demo.py                   CLI full pipeline runner
-├── ablation.py               5-level ablation study → evaluation/ablation_results.json
-├── score_ablation_resumes.py Score without retrieval (D1–D4 only)
-├── tests/test_all.py         ~75 unit + integration tests
-├── extras/                   Optional: cost_tracker, feedback, compliance
-└── requirements.txt
+│   ├── ablation_results.json     Snapshot from ablation.py (FinPay table in README)
+│   └── ablation_scores.json      score_ablation_resumes.py D1–D4 dump
+│
+├── docs/
+│   ├── architecture.tex          LaTeX architecture document
+│   └── Architecture_Document.pdf Compiled PDF
+│
+├── extras/
+│   ├── cost_tracker.py           Per-call token accounting
+│   ├── compliance.py             NYC LL144 bias audit, impact ratio
+│   ├── feedback.py               HITL recruiter decision logging
+│   ├── mcp_server.py             JSON-RPC 2.0 MCP server (9 tools)
+│   └── test_extras.py            Tests for extras modules
+│
+├── demo.py                       CLI full pipeline runner
+├── ablation.py                   5-level ablation study → evaluation/ablation_results.json
+├── score_ablation_resumes.py     Score without retrieval (D1–D4 only)
+├── tests/test_all.py             ~75 unit + integration tests
+├── manage.py                     Django management entry point
+├── requirements.txt
+├── tailwind.config.js            Tailwind CSS build config
+├── .env.example                  Template for environment variables
+└── logs/                         Worker logs (auto-created, gitignored)
 ```
 
 ---
@@ -626,8 +702,10 @@ resume_matcher/
 | **Confidence** | LLM self-reported confidence plus downgrade when CE sigmoid diverges strongly from `dim_composite` |
 | **Retrieval in web UI** | Match pipeline runs hybrid retrieval + CE logit when `src.retrieval` is available; if the engine fails, falls back to `ce_logit=0` (4D-only blend) |
 | **Index implementation** | Dense index stored as numpy array (not FAISS); fine for <10K resumes |
+| **Scoring mode selector** | UI stores Auto / LLM / Deterministic on `MatchRun.scoring_mode`; worker currently auto-detects mode via `has_llm()` — explicit enforcement is planned |
 | **LLM provider** | OpenAI only; `llm_client.py` has no Anthropic path in current code |
 | **Cost accounting** | `extras/cost_tracker.py` exists; not yet persisted on `MatchRun` in the DB |
+| **Celery** | `celery.py` and `tasks.py` exist; current worker path uses `subprocess` + `manage.py process_run` — Celery wiring is ready for production deployment |
 
 ---
 
