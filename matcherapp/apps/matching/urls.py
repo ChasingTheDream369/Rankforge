@@ -21,6 +21,7 @@ urlpatterns = [
     path('api/matching/candidate/<int:result_id>/',      api.candidate_api,   name='api_candidate'),
     path('api/matching/resume/<int:resume_id>/preview/', api.resume_preview,  name='api_resume_preview'),
     path('api/matching/run/<int:run_id>/rescore/',       api.rescore_run,     name='api_rescore_run'),
+    path('api/matching/run/<int:run_id>/delete-job/',    api.delete_job_for_run, name='api_delete_job_for_run'),
     path('api/matching/result/<int:result_id>/rescore/', api.rescore_single,  name='api_rescore_single'),
     path('api/matching/run/<int:run_id>/export/',        api.export_csv,      name='api_export_csv'),
 

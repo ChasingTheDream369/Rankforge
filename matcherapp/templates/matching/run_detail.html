@@ -31,6 +31,13 @@
         {% if run.status == 'failed' %}Retry{% else %}Re-score{% endif %}
     </button>
     {% endif %}
+    <button type="button" id="delete-job-btn"
+        {% if run.status == 'pending' or run.status == 'processing' %}disabled{% endif %}
+        class="px-3 py-1.5 rounded-lg text-xs font-medium border border-error-main/50 text-error-main transition-colors
+            {% if run.status == 'pending' or run.status == 'processing' %}opacity-50 cursor-not-allowed{% else %}hover:bg-error-main/10{% endif %}"
+        title="{% if run.status == 'pending' or run.status == 'processing' %}Unavailable while the run is processing{% else %}Permanently delete this job and all resumes/results{% endif %}">
+        Delete job
+    </button>
     <span id="status-badge" class="px-3 py-1.5 rounded-lg text-xs font-medium
         {% if run.status == 'complete' %}bg-success-main text-white
         {% elif run.status == 'processing' %}bg-info-main text-white
@@ -60,7 +67,12 @@
 <div id="results-section" class="bg-background-paper border border-divider-light rounded-xl overflow-hidden {% if run.status != 'complete' %}hidden{% endif %}">
     <div class="px-6 py-4 border-b border-divider-light flex items-center justify-between">
         <h2 class="text-text-dark font-medium">Ranked Candidates</h2>
-        <span class="text-text-disabled text-sm">{{ results|length }} candidates</span>
+        <span class="text-text-disabled text-sm">
+            {{ results|length }} ranked · {{ resume_upload_count }} upload(s)
+            {% if raw_result_row_count > resume_upload_count %}
+            <span class="text-warning-main"> · {{ raw_result_row_count }} score rows in DB (stale duplicates — delete job below to reset)</span>
+            {% endif %}
+        </span>
     </div>
     <div class="overflow-x-auto">
         <table class="w-full">

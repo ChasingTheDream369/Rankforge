@@ -40,7 +40,7 @@ DOMAIN_KEYWORDS = {
 }
 
 
-def _expand_terms(skill_text: str):
+def expand_terms(skill_text: str):
     terms = set()
     skill_lower = skill_text.lower().strip()
     terms.add(skill_lower)
@@ -58,7 +58,7 @@ def _expand_terms(skill_text: str):
 
 
 def find_skill_evidence(skill_name: str, resume_text: str):
-    terms = _expand_terms(skill_name)
+    terms = expand_terms(skill_name)
     sentences = re.split(r'[.\n•]+', resume_text)
     matches = []
     for sent in sentences:
@@ -132,7 +132,7 @@ def assess_seniority(resume_text: str, jd_years: int = 0):
 
 
 def assess_domain_fit(jd_text: str, resume_text: str):
-    def _doms(text):
+    def domain_keyword_hits(text):
         tl = text.lower()
         r = []
         for d, kws in DOMAIN_KEYWORDS.items():
@@ -141,8 +141,8 @@ def assess_domain_fit(jd_text: str, resume_text: str):
                 r.append((d, round(min(1.0, h / max(2, len(kws) * 0.3)), 2)))
         r.sort(key=lambda x: x[1], reverse=True)
         return r
-    jd_d = _doms(jd_text)
-    res_d = _doms(resume_text)
+    jd_d = domain_keyword_hits(jd_text)
+    res_d = domain_keyword_hits(resume_text)
     if not jd_d:
         return 0.5, "No JD domain found"
     if not res_d:

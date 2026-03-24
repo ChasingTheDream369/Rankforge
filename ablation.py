@@ -30,7 +30,7 @@ from src.evaluation.metrics import ndcg_at_k, mrr, precision_at_k, spearman_rho
 from src.pipeline import load_sample_data
 
 
-def _load_jsonl(path: str) -> dict:
+def load_jsonl(path: str) -> dict:
     """Load a file that is either a single JSON object or multiple JSON objects (JSONL)."""
     with open(path) as f:
         content = f.read().strip()
@@ -68,7 +68,7 @@ def load_data(jd_path=None, resume_paths=None):
             jd_text = p.read_text(encoding='utf-8', errors='replace')
         jd_id = p.stem
 
-        def _scan(dir_path):
+        def scan_resume_directory(dir_path):
             out = {}
             supported = set(EXTENSION_MAP.keys())
             for f in sorted(Path(dir_path).rglob('*')):
@@ -88,9 +88,9 @@ def load_data(jd_path=None, resume_paths=None):
                 tmpdir = tempfile.mkdtemp()
                 with zipfile.ZipFile(str(p2)) as zf:
                     zf.extractall(tmpdir)
-                resumes.update(_scan(tmpdir))
+                resumes.update(scan_resume_directory(tmpdir))
             elif p2.is_dir():
-                resumes.update(_scan(str(p2)))
+                resumes.update(scan_resume_directory(str(p2)))
             elif p2.is_file():
                 text = extract_text(str(p2))
                 if text and len(text.strip()) > 50:
@@ -114,7 +114,7 @@ def load_data(jd_path=None, resume_paths=None):
             resumes = ablation_resumes
             resume_keys = set(resumes.keys())
             if os.path.exists(GOLDEN_DATASET_PATH):
-                golden = _load_jsonl(GOLDEN_DATASET_PATH)
+                golden = load_jsonl(GOLDEN_DATASET_PATH)
                 candidates = [k for k in jd_files if k in golden]
                 jd_id = (
                     max(
@@ -129,7 +129,7 @@ def load_data(jd_path=None, resume_paths=None):
         else:
             all_resumes = {**txt_resumes, **ablation_resumes}
             if os.path.exists(GOLDEN_DATASET_PATH):
-                golden = _load_jsonl(GOLDEN_DATASET_PATH)
+                golden = load_jsonl(GOLDEN_DATASET_PATH)
                 best_jd = max(
                     (k for k in jd_files if k in golden),
                     key=lambda k: len(set(golden[k].keys()) & set(all_resumes.keys())),
@@ -145,7 +145,7 @@ def load_data(jd_path=None, resume_paths=None):
     # Load labels and attach to resume dicts so pipeline.py can use them
     labels = {}
     if os.path.exists(GOLDEN_DATASET_PATH):
-        golden = _load_jsonl(GOLDEN_DATASET_PATH)
+        golden = load_jsonl(GOLDEN_DATASET_PATH)
         raw_labels = golden.get(jd_id, {})
         for rid, lv in raw_labels.items():
             if rid in resumes:
@@ -321,10 +321,10 @@ METRIC_COLS = [
     ("Spearman", "spearman"),
 ]
 
-def _fmt(v):
+def format_metric_value(v):
     return f"{v:.4f}" if v is not None else "  —   "
 
-def _box_table(all_metrics):
+def box_table(all_metrics):
     """Print a box-bordered comparison table with winner markers."""
     col_w = 8
     name_w = 32
@@ -345,13 +345,13 @@ def _box_table(all_metrics):
         for _, key in METRIC_COLS:
             v = m.get(key)
             mark = "*" if (v is not None and best.get(key) is not None and abs(v - best[key]) < 1e-9) else " "
-            cells.append(f"{_fmt(v):>{col_w-1}}{mark}")
+            cells.append(f"{format_metric_value(v):>{col_w-1}}{mark}")
         name = m["name"][:name_w]
         print(f"  │ {name:<{name_w}} │ " + " │ ".join(cells) + " │")
     print(foot)
     print("  * = best in column")
 
-def _delta_table(all_metrics):
+def delta_table(all_metrics):
     """Print improvement deltas vs baseline for every metric."""
     base = all_metrics[0]
     col_w = 9
@@ -428,11 +428,11 @@ def main():
     print(f"\n\n{'=' * 80}")
     print(f"  METRIC COMPARISON  (vs golden dataset: {jd_id})")
     print(f"{'=' * 80}\n")
-    _box_table(all_metrics)
+    box_table(all_metrics)
 
     # ── Delta table ──
     print(f"\n  IMPROVEMENT OVER BASELINE (approach 1 = 0)\n")
-    _delta_table(all_metrics)
+    delta_table(all_metrics)
 
     # Save
     os.makedirs("evaluation", exist_ok=True)

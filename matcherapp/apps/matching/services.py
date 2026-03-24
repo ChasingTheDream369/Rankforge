@@ -5,13 +5,13 @@ from typing import Optional, Tuple
 from django.conf import settings
 from django.utils import timezone
 
-_project_root = str(settings.BASE_DIR)
-if _project_root not in sys.path:
-    sys.path.insert(0, _project_root)
+project_root = str(settings.BASE_DIR)
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 
 
-def _extract_text(resume):
+def extract_resume_text(resume):
     """Extract and persist raw text from an uploaded resume file."""
     from src.ingestion.extractor import extract_text
 
@@ -47,7 +47,7 @@ def custom_dim_weights_tuple(match_run) -> Optional[Tuple[float, float, float, f
     return None
 
 
-def _score_rejected(reason: str) -> dict:
+def score_rejected(reason: str) -> dict:
     """Return a zero-score sentinel for resumes that fail pre-flight checks."""
     return {
         'final_score': 0.0,
@@ -68,7 +68,7 @@ def _score_rejected(reason: str) -> dict:
     }
 
 
-def _score_single_resume(
+def score_single_resume(
     jd_text, cleaned, ce_logit, threat, n_candidates,
     jd_profile, custom_weights,
 ):
@@ -79,7 +79,7 @@ def _score_single_resume(
         threat.threat_level = "HIGH"
         threat.total_penalty = 0.9
         threat.flags.append("REJECTED: LLM non-resume gate triggered")
-        return _score_rejected("Document does not appear to be a resume — rejected before scoring"), threat
+        return score_rejected("Document does not appear to be a resume — rejected before scoring"), threat
 
     scored = score_resume(
         jd_text=jd_text,
@@ -109,7 +109,7 @@ def process_match_run(match_run_id):
     run = MatchRun.objects.get(id=match_run_id)
     run.status = 'processing'
     cfg = run.scoring_config or {}
-    cfg['_worker_pid'] = os.getpid()
+    cfg['worker_pid'] = os.getpid()
     run.scoring_config = cfg
     run.save(update_fields=['status', 'scoring_config'])
 
@@ -125,7 +125,7 @@ def process_match_run(match_run_id):
     dup_resume_ids = set()
 
     for resume in resumes:
-        text = _extract_text(resume)
+        text = extract_resume_text(resume)
         if not text:
             text = f"Resume: {resume.name}"
         content_hash = hashlib.sha256(text.encode('utf-8', errors='replace')).hexdigest()
@@ -177,16 +177,36 @@ def process_match_run(match_run_id):
                     (resume.raw_text or resume.name).encode('utf-8', errors='replace')
                 ).hexdigest()
                 dup_of = seen_hashes.get(content_hash, "another resume")
-                scored = _score_rejected(f"Duplicate of {dup_of} — identical content submitted")
-                MatchResult.objects.create(
-                    match_run=run, resume=resume,
-                    final_score=scored['final_score'], confidence=scored['confidence'],
-                    recommendation=scored['recommendation'],
-                    d1_skills=0.0, d2_seniority=0.0, d3_domain=0.0, d4_constraints=0.0,
-                    dim_composite=0.0, ce_sigmoid=0.5, ce_weight_used=0.0,
-                    scoring_mode='dedup', strengths=[], gaps=scored['gaps'],
-                    rationale=scored['rationale'], skill_detail={}, stage_scores=scored,
-                    threat_level='NONE', adversarial_penalty=0.0, threat_flags=[],
+                scored = score_rejected(f"Duplicate of {dup_of} — identical content submitted")
+                # update_or_create: overlapping workers or restarts must not append duplicate rows
+                MatchResult.objects.update_or_create(
+                    match_run=run,
+                    resume=resume,
+                    defaults={
+                        "rank": 0,
+                        "final_score": scored["final_score"],
+                        "confidence": scored["confidence"],
+                        "recommendation": scored["recommendation"],
+                        "d1_skills": 0.0,
+                        "d2_seniority": 0.0,
+                        "d3_domain": 0.0,
+                        "d4_constraints": 0.0,
+                        "dim_composite": 0.0,
+                        "ce_sigmoid": 0.5,
+                        "ce_weight_used": 0.0,
+                        "scoring_mode": "dedup",
+                        "strengths": [],
+                        "gaps": scored["gaps"],
+                        "rationale": scored["rationale"],
+                        "skill_detail": {},
+                        "seniority_detail": {},
+                        "domain_detail": {},
+                        "constraint_detail": [],
+                        "stage_scores": scored,
+                        "threat_level": "NONE",
+                        "adversarial_penalty": 0.0,
+                        "threat_flags": [],
+                    },
                 )
             except Exception as e:
                 print(f"Error saving dedup for {resume.name}: {e}")
@@ -207,38 +227,41 @@ def process_match_run(match_run_id):
             ce_logit = ce_logits.get(rid, 0.0)
 
             try:
-                scored, threat = _score_single_resume(
+                scored, threat = score_single_resume(
                     jd_text, cleaned, ce_logit, threat, n,
                     jd_profile, custom_weights,
                 )
                 base_stage = stage_scores_by_rid.get(rid, {})
                 for k, v in base_stage.items():
                     scored[k] = v
-                MatchResult.objects.create(
+                MatchResult.objects.update_or_create(
                     match_run=run,
                     resume=resume,
-                    final_score=scored['final_score'],
-                    confidence=scored['confidence'],
-                    recommendation=scored['recommendation'],
-                    d1_skills=scored['d1_skills'],
-                    d2_seniority=scored['d2_seniority'],
-                    d3_domain=scored['d3_domain'],
-                    d4_constraints=scored['d4_constraints'],
-                    dim_composite=scored['dim_composite'],
-                    ce_sigmoid=scored['ce_sigmoid'],
-                    ce_weight_used=scored['ce_weight'],
-                    scoring_mode=scored['mode'],
-                    strengths=scored.get('strengths', []),
-                    gaps=scored.get('gaps', []),
-                    rationale=scored.get('rationale', ''),
-                    skill_detail=scored.get('skill_detail', {}),
-                    seniority_detail=scored.get('seniority_detail', {}),
-                    domain_detail=scored.get('domain_detail', {}),
-                    constraint_detail=scored.get('constraint_detail', []),
-                    stage_scores=scored,
-                    threat_level=threat.threat_level,
-                    adversarial_penalty=threat.total_penalty,
-                    threat_flags=threat.flags if hasattr(threat, 'flags') else [],
+                    defaults={
+                        "rank": 0,
+                        "final_score": scored["final_score"],
+                        "confidence": scored["confidence"],
+                        "recommendation": scored["recommendation"],
+                        "d1_skills": scored["d1_skills"],
+                        "d2_seniority": scored["d2_seniority"],
+                        "d3_domain": scored["d3_domain"],
+                        "d4_constraints": scored["d4_constraints"],
+                        "dim_composite": scored["dim_composite"],
+                        "ce_sigmoid": scored["ce_sigmoid"],
+                        "ce_weight_used": scored["ce_weight"],
+                        "scoring_mode": scored["mode"],
+                        "strengths": scored.get("strengths", []),
+                        "gaps": scored.get("gaps", []),
+                        "rationale": scored.get("rationale", ""),
+                        "skill_detail": scored.get("skill_detail", {}),
+                        "seniority_detail": scored.get("seniority_detail", {}),
+                        "domain_detail": scored.get("domain_detail", {}),
+                        "constraint_detail": scored.get("constraint_detail", []),
+                        "stage_scores": scored,
+                        "threat_level": threat.threat_level,
+                        "adversarial_penalty": threat.total_penalty,
+                        "threat_flags": threat.flags if hasattr(threat, "flags") else [],
+                    },
                 )
             except Exception as e:
                 print(f"Error scoring {resume.name}: {e}")
@@ -248,6 +271,17 @@ def process_match_run(match_run_id):
             processed_count += 1
             run.processed = processed_count
             run.save(update_fields=['processed'])
+
+        # ── Drop duplicate rows per resume (overlapping workers / legacy data) ──
+        seen_resume = set()
+        dup_ids = []
+        for row in run.results.order_by("-final_score", "-id"):
+            if row.resume_id in seen_resume:
+                dup_ids.append(row.id)
+            else:
+                seen_resume.add(row.resume_id)
+        if dup_ids:
+            MatchResult.objects.filter(id__in=dup_ids).delete()
 
         # ── Assign ranks ──────────────────────────────────────────────────
         results = list(run.results.order_by('-final_score'))

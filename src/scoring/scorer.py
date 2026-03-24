@@ -136,15 +136,15 @@ def is_resume(text: str) -> bool:
 
     # Fast pattern-based pre-check — requires markers from TWO distinct categories
     # to avoid false-positives on non-resume docs (e.g. earnings reports with "Summary").
-    _CONTACT = re.compile(
+    resume_contact_pattern = re.compile(
         r'(?i)\b(email|phone|linkedin|github|portfolio|contact)\b'
         r'|[\w.+-]+@[\w-]+\.[a-z]{2,}'  # bare email address
     )
-    _SECTION = re.compile(
+    resume_section_pattern = re.compile(
         r'(?i)\b(experience|education|employment|work history|skills|certifications?|'
         r'bachelor|master|university|college|projects?)\b'
     )
-    if _CONTACT.search(text) and len(_SECTION.findall(text)) >= 2:
+    if resume_contact_pattern.search(text) and len(resume_section_pattern.findall(text)) >= 2:
         return True
 
     from src.scoring.llm_client import call_extraction_llm

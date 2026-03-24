@@ -33,20 +33,20 @@ from matcherapp.apps.system_prompts.ontology import EXTRACTION_PROMPT, ONTOLOGY_
 # === ESCO Skill Extractor (primary path when available) ===
 
 ESCO_AVAILABLE = False
-_esco_extractor = None
+esco_extractor_instance = None
 
 
 def get_esco_extractor():
     """Lazy-load ESCO extractor (downloads model on first use)."""
-    global ESCO_AVAILABLE, _esco_extractor
-    if _esco_extractor is not None:
-        return _esco_extractor
+    global ESCO_AVAILABLE, esco_extractor_instance
+    if esco_extractor_instance is not None:
+        return esco_extractor_instance
     try:
         from esco_skill_extractor import SkillExtractor
-        _esco_extractor = SkillExtractor()
+        esco_extractor_instance = SkillExtractor()
         ESCO_AVAILABLE = True
         print("  ESCO skill extractor loaded (13K+ skills)")
-        return _esco_extractor
+        return esco_extractor_instance
     except ImportError:
         ESCO_AVAILABLE = False
         return None

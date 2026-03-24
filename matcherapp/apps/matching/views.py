@@ -2,6 +2,8 @@ from django.shortcuts import render, get_object_or_404, redirect
 from matcherapp.decorators import login_required
 from matcherapp.models import MatchRun, MatchResult, Job
 
+from matcherapp.apps.matching.api import unique_match_results_for_display
+
 
 def redirect_to_dashboard(request):
     return redirect('dashboard')
@@ -37,7 +39,7 @@ def new_run(request):
     return render(request, 'matching/new_run.html')
 
 
-_PROFILE_LABELS = {
+WEIGHT_PROFILE_DISPLAY_LABELS = {
     "junior": "Junior",
     "mid": "Mid-level",
     "senior": "Senior",
@@ -47,11 +49,11 @@ _PROFILE_LABELS = {
 }
 
 
-def _scoring_config_note(cfg: dict) -> str:
+def scoring_config_note(cfg: dict) -> str:
     if not cfg or not cfg.get("custom_dims") or not cfg.get("weights"):
         return ""
     profile = cfg.get("profile", "custom")
-    label = _PROFILE_LABELS.get(profile, profile.title())
+    label = WEIGHT_PROFILE_DISPLAY_LABELS.get(profile, profile.title())
     w = cfg["weights"]
     rp = cfg.get("weights_raw_pct")
     if rp and len(rp) == 4:
@@ -68,11 +70,15 @@ def _scoring_config_note(cfg: dict) -> str:
 @login_required
 def run_detail(request, run_id):
     run = get_object_or_404(MatchRun.objects.select_related('job'), id=run_id)
-    results = run.results.select_related('resume').all()
+    results = unique_match_results_for_display(run)
+    resume_upload_count = run.resumes.count()
+    raw_result_row_count = run.results.count()
     context = {
         'run': run,
         'results': results,
-        'scoring_weights_note': _scoring_config_note(run.scoring_config or {}),
+        'resume_upload_count': resume_upload_count,
+        'raw_result_row_count': raw_result_row_count,
+        'scoring_weights_note': scoring_config_note(run.scoring_config or {}),
     }
     return render(request, 'matching/run_detail.html', context)
 

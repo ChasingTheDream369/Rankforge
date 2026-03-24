@@ -13,26 +13,26 @@ from pathlib import Path
 from django.conf import settings
 
 # ── Shared state dicts ────────────────────────────────────────────────────────
-_test_state  = {"status": "idle",  "results": None, "error": None}
-_ablat_state = {
+test_runner_state = {"status": "idle",  "results": None, "error": None}
+ablation_runner_state = {
     "status": "idle",
     "results": None,
     "error": None,
     "progress": None,  # {"step": int, "total": int, "name": str} while running
     "started_at": None,  # time.time() when run started
 }
-_lock = threading.Lock()
+runner_state_lock = threading.Lock()
 
 
-def _set_ablation_progress(step: int, total: int, name: str) -> None:
-    with _lock:
-        if _ablat_state["status"] == "running":
-            _ablat_state["progress"] = {"step": step, "total": total, "name": name}
+def set_ablation_progress(step: int, total: int, name: str) -> None:
+    with runner_state_lock:
+        if ablation_runner_state["status"] == "running":
+            ablation_runner_state["progress"] = {"step": step, "total": total, "name": name}
 
 
 # ── Test runner ───────────────────────────────────────────────────────────────
 
-def _load_test_descriptions(test_file: str) -> dict:
+def load_test_descriptions(test_file: str) -> dict:
     """Import the test module and extract docstrings keyed by 'ClassName::test_name'."""
     descriptions = {}
     try:
@@ -50,7 +50,7 @@ def _load_test_descriptions(test_file: str) -> dict:
     return descriptions
 
 
-def _parse_pytest_output(stdout: str, descriptions: dict = None) -> dict:
+def parse_pytest_output(stdout: str, descriptions: dict = None) -> dict:
     """Parse verbose pytest stdout into structured result dict."""
     descriptions = descriptions or {}
     tests = []
@@ -104,47 +104,47 @@ def _parse_pytest_output(stdout: str, descriptions: dict = None) -> dict:
 
 def run_tests_bg():
     """Spawn background thread to run pytest and store results."""
-    with _lock:
-        if _test_state["status"] == "running":
+    with runner_state_lock:
+        if test_runner_state["status"] == "running":
             return
-        _test_state.update({"status": "running", "results": None, "error": None})
+        test_runner_state.update({"status": "running", "results": None, "error": None})
 
-    def _worker():
+    def test_worker():
         try:
             python = sys.executable
             test_file = str(Path(settings.BASE_DIR) / "tests" / "test_all.py")
-            descriptions = _load_test_descriptions(test_file)
+            descriptions = load_test_descriptions(test_file)
             result = subprocess.run(
                 [python, "-m", "pytest", test_file, "-v", "--tb=short", "--no-header"],
                 capture_output=True, text=True,
                 cwd=str(settings.BASE_DIR),
                 timeout=120,
             )
-            parsed = _parse_pytest_output(result.stdout + result.stderr, descriptions)
-            with _lock:
-                _test_state["status"]  = "done"
-                _test_state["results"] = parsed
+            parsed = parse_pytest_output(result.stdout + result.stderr, descriptions)
+            with runner_state_lock:
+                test_runner_state["status"]  = "done"
+                test_runner_state["results"] = parsed
         except Exception as exc:
-            with _lock:
-                _test_state["status"] = "error"
-                _test_state["error"]  = str(exc)
+            with runner_state_lock:
+                test_runner_state["status"] = "error"
+                test_runner_state["error"]  = str(exc)
 
-    threading.Thread(target=_worker, daemon=True).start()
+    threading.Thread(target=test_worker, daemon=True).start()
 
 
 def get_test_state() -> dict:
-    with _lock:
-        return dict(_test_state)
+    with runner_state_lock:
+        return dict(test_runner_state)
 
 
 # ── Ablation runner ───────────────────────────────────────────────────────────
 
 def run_ablation_bg():
     """Spawn background thread to run ablation study."""
-    with _lock:
-        if _ablat_state["status"] == "running":
+    with runner_state_lock:
+        if ablation_runner_state["status"] == "running":
             return
-        _ablat_state.update(
+        ablation_runner_state.update(
             {
                 "status": "running",
                 "results": None,
@@ -154,7 +154,7 @@ def run_ablation_bg():
             }
         )
 
-    def _worker():
+    def ablation_worker():
         try:
             # Ensure src is importable
             root = str(settings.BASE_DIR)
@@ -187,7 +187,7 @@ def run_ablation_bg():
             rows = []
             n_ap = len(approaches)
             for i, (name, fn) in enumerate(approaches, start=1):
-                _set_ablation_progress(i, n_ap, name)
+                set_ablation_progress(i, n_ap, name)
                 try:
                     ranked_ids, scores = fn(jd_text, resumes)
                     metrics = abl.evaluate_ranking(ranked_ids, labels) if labels else {}
@@ -197,24 +197,24 @@ def run_ablation_bg():
                     rows.append({"approach": name, "metrics": {}, "top5": [],
                                  "scores": {}, "error": str(e)})
 
-            with _lock:
-                _ablat_state["status"] = "done"
-                _ablat_state["results"] = {"rows": rows, "jd_id": jd_id, "has_labels": bool(labels)}
-                _ablat_state["progress"] = None
-                _ablat_state["started_at"] = None
+            with runner_state_lock:
+                ablation_runner_state["status"] = "done"
+                ablation_runner_state["results"] = {"rows": rows, "jd_id": jd_id, "has_labels": bool(labels)}
+                ablation_runner_state["progress"] = None
+                ablation_runner_state["started_at"] = None
         except Exception as exc:
-            with _lock:
-                _ablat_state["status"] = "error"
-                _ablat_state["error"]  = str(exc)
-                _ablat_state["progress"] = None
-                _ablat_state["started_at"] = None
+            with runner_state_lock:
+                ablation_runner_state["status"] = "error"
+                ablation_runner_state["error"]  = str(exc)
+                ablation_runner_state["progress"] = None
+                ablation_runner_state["started_at"] = None
 
-    threading.Thread(target=_worker, daemon=True).start()
+    threading.Thread(target=ablation_worker, daemon=True).start()
 
 
 def get_ablation_state() -> dict:
-    with _lock:
-        out = dict(_ablat_state)
+    with runner_state_lock:
+        out = dict(ablation_runner_state)
     if out.get("status") == "running" and out.get("started_at"):
         out["elapsed_sec"] = int(time.time() - out["started_at"])
     return out

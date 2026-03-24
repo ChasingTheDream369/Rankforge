@@ -12,13 +12,13 @@ from matcherapp.apps.system_prompts.extraction import (
     RESUME_SYSTEM,
 )
 
-_EXTRACTION_TOOLS = [
+EXTRACTION_TOOLS = [
     {"type": "function", "function": {"name": "canonicalize_skill", "description": "Get canonical form of a skill. Call for EVERY skill.", "parameters": {"type": "object", "properties": {"skill_name": {"type": "string"}}, "required": ["skill_name"]}}},
     {"type": "function", "function": {"name": "canonicalize_domain", "description": "Get canonical domain. Returns: fintech|enterprise_saas|ai_ml|healthcare|platform_devops|ecommerce|other", "parameters": {"type": "object", "properties": {"domain_name": {"type": "string"}}, "required": ["domain_name"]}}},
 ]
 
 
-def _execute_extraction_tool(name: str, args: dict) -> str:
+def execute_extraction_tool(name: str, args: dict) -> str:
     from src.scoring.extraction_schema import canonicalize_skill, canonicalize_domain
     if name == "canonicalize_skill":
         return canonicalize_skill(args.get("skill_name", ""))
@@ -27,7 +27,7 @@ def _execute_extraction_tool(name: str, args: dict) -> str:
     return ""
 
 
-def _call_extraction_with_tools(prompt: str, system: str, max_tokens: int = 800) -> Optional[str]:
+def call_extraction_with_tools(prompt: str, system: str, max_tokens: int = 800) -> Optional[str]:
     if not has_llm():
         return None
     from src.config import OPENAI_TEMPERATURE, EXTRACTION_MODEL
@@ -37,7 +37,7 @@ def _call_extraction_with_tools(prompt: str, system: str, max_tokens: int = 800)
     for _ in range(8):
         resp = client.chat.completions.create(
             model=EXTRACTION_MODEL, messages=msgs, max_tokens=max_tokens, temperature=OPENAI_TEMPERATURE,
-            tools=_EXTRACTION_TOOLS, tool_choice="auto",
+            tools=EXTRACTION_TOOLS, tool_choice="auto",
         )
         msg = resp.choices[0].message
         if not msg.tool_calls:
@@ -48,7 +48,7 @@ def _call_extraction_with_tools(prompt: str, system: str, max_tokens: int = 800)
                 args = json.loads(tc.function.arguments) if tc.function.arguments else {}
             except Exception:
                 args = {}
-            result = _execute_extraction_tool(tc.function.name, args)
+            result = execute_extraction_tool(tc.function.name, args)
             msgs.append({"role": "tool", "tool_call_id": tc.id, "content": result})
     return None
 

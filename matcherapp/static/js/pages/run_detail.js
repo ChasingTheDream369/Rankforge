@@ -24,6 +24,51 @@ $('#rescore-btn').on('click', function () {
         .fail(() => $btn.prop('disabled', false).text('Re-score'));
 });
 
+const setDeleteJobEnabled = (enabled) => {
+    const $btn = $('#delete-job-btn');
+    if (enabled) {
+        $btn
+            .prop('disabled', false)
+            .removeClass('opacity-50 cursor-not-allowed')
+            .addClass('hover:bg-error-main/10')
+            .attr('title', 'Permanently delete this job and all resumes/results');
+    } else {
+        $btn
+            .prop('disabled', true)
+            .addClass('opacity-50 cursor-not-allowed')
+            .removeClass('hover:bg-error-main/10')
+            .attr('title', 'Unavailable while the run is processing');
+    }
+};
+
+$('#delete-job-btn').on('click', function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    if ($(this).prop('disabled')) return;
+    if (
+        !window.confirm(
+            'Delete this job and ALL uploaded resumes and scores tied to it? This cannot be undone.'
+        )
+    ) {
+        return;
+    }
+    const $btn = $(this).prop('disabled', true).text('Deleting…');
+    $.post(`/api/matching/run/${runId}/delete-job/`)
+        .done((data) => {
+            window.location.href = data.redirect_url || '/dashboard/';
+        })
+        .fail((xhr) => {
+            const msg = xhr.responseJSON?.message;
+            if (msg) window.showSnackbar('error', msg);
+            if (xhr.status === 400) {
+                setDeleteJobEnabled(false);
+            } else {
+                setDeleteJobEnabled(true);
+            }
+            $btn.text('Delete job');
+        });
+});
+
 // ── Table sort ────────────────────────────────────────────────────────────
 let sortCol = 'rank';
 let sortAsc = true;
@@ -49,7 +94,9 @@ $(document).on('click', '.sort-header', function () {
     sortTable();
 });
 
-// ── Status polling ────────────────────────────────────────────────────────
+// ── Status polling (module singleton — avoid stacked intervals on HMR / double init) ──
+let runDetailPollTimer = null;
+
 const renderScoreBadge = (score) => {
     const cls = score >= 0.70 ? 'bg-success-main'
               : score >= 0.40 ? 'bg-warning-main'
@@ -88,11 +135,14 @@ const renderResults = (results) => {
 };
 
 const pollStatus = () => {
-    let timer = null;
+    if (runDetailPollTimer != null) {
+        clearInterval(runDetailPollTimer);
+        runDetailPollTimer = null;
+    }
     const stopPolling = () => {
-        if (timer != null) {
-            clearInterval(timer);
-            timer = null;
+        if (runDetailPollTimer != null) {
+            clearInterval(runDetailPollTimer);
+            runDetailPollTimer = null;
         }
     };
 
@@ -104,12 +154,14 @@ const pollStatus = () => {
 
         if (st === 'complete') {
             stopPolling();
+            setDeleteJobEnabled(true);
             $('#status-badge')
                 .attr('class', 'px-3 py-1.5 rounded-lg text-xs font-medium bg-success-main text-white')
                 .text('Complete');
             $('#progress-section').addClass('hidden');
         } else if (st === 'failed') {
             stopPolling();
+            setDeleteJobEnabled(true);
             window.showSnackbar('error', 'Processing failed. Check server logs and try again.');
             $('#status-badge')
                 .attr('class', 'px-3 py-1.5 rounded-lg text-xs font-medium bg-error-main text-white')
@@ -122,7 +174,7 @@ const pollStatus = () => {
         .done(applyPayload)
         .fail(() => window.showSnackbar('error', 'Could not load run status. Refresh the page.'));
 
-    timer = setInterval(() => {
+    runDetailPollTimer = setInterval(() => {
         $.get(`/api/matching/run/${runId}/status/`)
             .done(applyPayload)
             .fail(() => { /* keep polling; transient errors */ });

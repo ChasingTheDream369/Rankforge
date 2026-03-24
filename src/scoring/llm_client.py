@@ -14,19 +14,19 @@ from src.config import (
     EXTRACTION_MODEL, SCORING_MODEL,
 )
 
-_client = None
-_client_lock = threading.Lock()
+openai_client_singleton = None
+client_lock = threading.Lock()
 
 
 def get_openai_client():
     """Return a shared OpenAI client (thread-safe lazy singleton)."""
-    global _client
-    if _client is None:
-        with _client_lock:
-            if _client is None:
+    global openai_client_singleton
+    if openai_client_singleton is None:
+        with client_lock:
+            if openai_client_singleton is None:
                 from openai import OpenAI
-                _client = OpenAI(api_key=OPENAI_API_KEY)
-    return _client
+                openai_client_singleton = OpenAI(api_key=OPENAI_API_KEY)
+    return openai_client_singleton
 
 
 def call_openai(prompt: str, model: str, max_tokens: int = 1000, system: str = "") -> Optional[str]:

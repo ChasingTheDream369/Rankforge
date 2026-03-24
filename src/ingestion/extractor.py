@@ -28,7 +28,7 @@ EXTENSION_MAP = {
 }
 
 # MIME → extractor key
-_MIME_MAP = [
+MIME_MAP = [
     ('application/pdf',                    'pdf'),
     ('application/msword',                 'doc_legacy'),
     ('application/vnd.openxmlformats',     'docx'),
@@ -52,7 +52,7 @@ def detect_format(filepath: str) -> str:
             capture_output=True, text=True, timeout=5,
         )
         mime = result.stdout.strip().lower()
-        for prefix, fmt in _MIME_MAP:
+        for prefix, fmt in MIME_MAP:
             if mime.startswith(prefix):
                 # .tex files report text/plain or text/x-tex — override to latex
                 # so raw LaTeX commands are stripped before scoring.
@@ -103,7 +103,7 @@ def extract_text(filepath: str) -> str:
     return text.strip()
 
 
-def _ocr_pdf(filepath: str, reader=None) -> str:
+def ocr_pdf(filepath: str, reader=None) -> str:
     """OCR fallback for scanned / image-only PDFs.
 
     Strategy (in order):
@@ -189,7 +189,7 @@ def extract_pdf(filepath: str) -> str:
 
     # Attempt 3: OCR — scanned / image-only PDF.
     # Extract embedded images via pypdf and run tesseract on each page image.
-    return _ocr_pdf(filepath, reader)
+    return ocr_pdf(filepath, reader)
 
 
 def extract_latex(filepath: str) -> str:
@@ -316,8 +316,8 @@ def extract_image(filepath: str) -> str:
 
 
 # Files to skip regardless of MIME (system / hidden / archive files)
-_SKIP_NAMES = {'.DS_Store', 'Thumbs.db', '__MACOSX'}
-_SKIP_EXTS  = {'.zip', '.tar', '.gz', '.bz2', '.7z', '.rar', '.exe', '.dmg'}
+SKIP_NAMES = {'.DS_Store', 'Thumbs.db', '__MACOSX'}
+SKIP_EXTS = {'.zip', '.tar', '.gz', '.bz2', '.7z', '.rar', '.exe', '.dmg'}
 
 
 def extract_directory(dir_path: str) -> Dict[str, str]:
@@ -333,9 +333,9 @@ def extract_directory(dir_path: str) -> Dict[str, str]:
     for f in sorted(p.iterdir()):
         if not f.is_file():
             continue
-        if f.name in _SKIP_NAMES or f.name.startswith('.') or f.name.startswith('__'):
+        if f.name in SKIP_NAMES or f.name.startswith('.') or f.name.startswith('__'):
             continue
-        if f.suffix.lower() in _SKIP_EXTS:
+        if f.suffix.lower() in SKIP_EXTS:
             continue
         try:
             text = extract_text(str(f))

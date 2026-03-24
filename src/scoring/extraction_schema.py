@@ -102,7 +102,7 @@ SENIORITY_CANONICAL = {
 }
 
 
-def _canonical_domain(raw: str) -> str:
+def domain_string_to_canonical(raw: str) -> str:
     """Map freeform domain string to canonical. Returns 'other' if unknown."""
     if not raw or not isinstance(raw, str):
         return "other"
@@ -110,7 +110,7 @@ def _canonical_domain(raw: str) -> str:
     return DOMAIN_CANONICAL.get(key, "other")
 
 
-def _canonical_seniority(raw: str) -> str:
+def seniority_string_to_canonical(raw: str) -> str:
     """Map freeform seniority to canonical."""
     if not raw or not isinstance(raw, str):
         return "mid"
@@ -118,7 +118,7 @@ def _canonical_seniority(raw: str) -> str:
     return SENIORITY_CANONICAL.get(key, "mid")
 
 
-def _canonical_skill(name: str, skill_canonical_map: Optional[Dict[str, str]] = None) -> str:
+def skill_string_to_canonical(name: str, skill_canonical_map: Optional[Dict[str, str]] = None) -> str:
     """
     Map skill name to canonical form. Uses:
     1. SKILL_ALIASES for common variants
@@ -153,7 +153,7 @@ def _canonical_skill(name: str, skill_canonical_map: Optional[Dict[str, str]] = 
                     return cmap[p]
             # Use first part canonicalized if any matches
             if parts:
-                first = _canonical_skill(parts[0], cmap)
+                first = skill_string_to_canonical(parts[0], cmap)
                 if first:
                     return first
             return parts[0] if parts else n
@@ -181,7 +181,7 @@ def normalize_jd_profile(raw: Optional[dict], skill_canonical_map: Optional[Dict
         out["required_skills"] = []
         for s in skills_raw[:15]:  # cap at 15
             if isinstance(s, dict) and "name" in s:
-                name = _canonical_skill(str(s.get("name", "")), scm)
+                name = skill_string_to_canonical(str(s.get("name", "")), scm)
                 if name:
                     imp = str(s.get("importance", "nice")).lower()
                     out["required_skills"].append({
@@ -190,7 +190,7 @@ def normalize_jd_profile(raw: Optional[dict], skill_canonical_map: Optional[Dict
                     })
             elif isinstance(s, str) and s.strip():
                 out["required_skills"].append({
-                    "name": _canonical_skill(s.strip(), scm),
+                    "name": skill_string_to_canonical(s.strip(), scm),
                     "importance": "nice"
                 })
     else:
@@ -204,10 +204,10 @@ def normalize_jd_profile(raw: Optional[dict], skill_canonical_map: Optional[Dict
         out["years_required"] = 0
 
     # domain
-    out["domain"] = _canonical_domain(raw.get("domain", ""))
+    out["domain"] = domain_string_to_canonical(raw.get("domain", ""))
 
     # seniority
-    out["seniority"] = _canonical_seniority(raw.get("seniority", ""))
+    out["seniority"] = seniority_string_to_canonical(raw.get("seniority", ""))
 
     # hard_constraints — keep as list of strings, truncate
     hc = raw.get("hard_constraints")
@@ -219,7 +219,7 @@ def normalize_jd_profile(raw: Optional[dict], skill_canonical_map: Optional[Dict
     return out
 
 
-def _evidence_is_verbatim(evidence: str, source_text: str) -> bool:
+def evidence_is_verbatim(evidence: str, source_text: str) -> bool:
     """Check if evidence is a substring of source (allowing minor normalization)."""
     if not evidence or not source_text:
         return False
@@ -253,7 +253,7 @@ def normalize_resume_profile(
         out["skills"] = []
         for s in skills_raw[:15]:
             if isinstance(s, dict) and "name" in s:
-                name = _canonical_skill(str(s.get("name", "")), scm)
+                name = skill_string_to_canonical(str(s.get("name", "")), scm)
                 if not name:
                     continue
                 level = str(s.get("level", "LISTED")).upper()
@@ -261,13 +261,13 @@ def normalize_resume_profile(
                     level = "LISTED"
                 evidence = str(s.get("evidence", "")).strip()[:300]
                 if validate_evidence and evidence and source_text:
-                    if not _evidence_is_verbatim(evidence, source_text):
+                    if not evidence_is_verbatim(evidence, source_text):
                         evidence = ""
                         level = "LISTED"  # downgrade — can't verify BUILT_WITH/USED
                 out["skills"].append({"name": name, "level": level, "evidence": evidence})
             elif isinstance(s, str) and s.strip():
                 out["skills"].append({
-                    "name": _canonical_skill(s.strip(), scm),
+                    "name": skill_string_to_canonical(s.strip(), scm),
                     "level": "LISTED",
                     "evidence": ""
                 })
@@ -287,7 +287,7 @@ def normalize_resume_profile(
         seen = set()
         out["domains"] = []
         for d in domains_raw[:5]:
-            c = _canonical_domain(str(d)) if d else "other"
+            c = domain_string_to_canonical(str(d)) if d else "other"
             if c != "other" and c not in seen:
                 seen.add(c)
                 out["domains"].append(c)
@@ -304,7 +304,7 @@ def normalize_resume_profile(
             v = ss.get(k)
             if v and isinstance(v, str):
                 v = v.strip()[:400]
-                if validate_evidence and v and source_text and not _evidence_is_verbatim(v, source_text):
+                if validate_evidence and v and source_text and not evidence_is_verbatim(v, source_text):
                     v = ""
                 out["seniority_signals"][k] = v if v else None
             else:
@@ -324,13 +324,13 @@ def normalize_resume_profile(
 
 def get_ontology_skill_keys() -> set:
     """Return set of ontology surface forms. Kept for backward compat."""
-    return set(_get_skill_canonical_map().keys())
+    return set(build_ontology_skill_canonical_map().keys())
 
 
-def _get_skill_canonical_map() -> Dict[str, str]:
+def build_ontology_skill_canonical_map() -> Dict[str, str]:
     """
     Build map: surface_form -> canonical for all ontology keys + adjacents.
-    Used by _canonical_skill for standardized skill matching.
+    Used by skill_string_to_canonical for standardized skill matching.
     """
     try:
         from src.ingestion.ontology import SKILL_ONTOLOGY
@@ -349,7 +349,7 @@ def _get_skill_canonical_map() -> Dict[str, str]:
 
 def get_skill_canonical_map() -> Dict[str, str]:
     """Ontology-derived canonical map. SKILL_ALIASES override ontology when both present."""
-    m = _get_skill_canonical_map()
+    m = build_ontology_skill_canonical_map()
     m.update(SKILL_ALIASES)  # aliases override (e.g. to keep "sql" generic)
     return m
 
@@ -362,7 +362,7 @@ def canonicalize_skill(skill_name: str) -> str:
     Call this for every skill before including in required_skills or skills.
     Returns standardized form (e.g. "Golang" -> "go", "PostgreSQL" -> "postgresql").
     """
-    result = _canonical_skill(skill_name, get_skill_canonical_map())
+    result = skill_string_to_canonical(skill_name, get_skill_canonical_map())
     return result or skill_name.lower().strip() if skill_name else ""
 
 
@@ -372,4 +372,4 @@ def canonicalize_domain(domain_name: str) -> str:
     Call this for domain/domains before including in output.
     Returns one of: fintech, enterprise_saas, ai_ml, healthcare, platform_devops, ecommerce, other.
     """
-    return _canonical_domain(domain_name)
+    return domain_string_to_canonical(domain_name)

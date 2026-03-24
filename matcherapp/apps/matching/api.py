@@ -1,17 +1,19 @@
 import csv
 import os
+import signal
 import sys
 import json
 import subprocess
 from django.conf import settings
 from django.http import JsonResponse, HttpResponse
+from django.urls import reverse
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 from matcherapp.decorators import login_required
 from matcherapp.models import Job, MatchRun, Resume, MatchResult
 
 
-def _launch_run_worker(run_id: int):
+def launch_run_worker(run_id: int):
     """Start process_run in a detached subprocess that survives server reloads."""
     subprocess.Popen(
         [sys.executable, 'manage.py', 'process_run', str(run_id)],
@@ -33,7 +35,7 @@ WEIGHT_PROFILE_PRESETS = {
 }
 
 
-def _parse_scoring_config_from_request(request) -> dict:
+def parse_scoring_config_from_request(request) -> dict:
     """
     Build MatchRun.scoring_config from POST.
     Supports three modes:
@@ -144,7 +146,7 @@ def start_run(request):
             return JsonResponse({'message': f'Maximum {MAX_RESUMES_PER_RUN} resumes per run.'}, status=400)
 
         job = Job.objects.create(title=jd_title, description=jd_text)
-        scoring_cfg = _parse_scoring_config_from_request(request)
+        scoring_cfg = parse_scoring_config_from_request(request)
         run = MatchRun.objects.create(
             job=job,
             scoring_mode=scoring_mode,
@@ -169,7 +171,7 @@ def start_run(request):
         for d in temp_dirs:
             shutil.rmtree(d, ignore_errors=True)
 
-        _launch_run_worker(run.id)
+        launch_run_worker(run.id)
 
         return JsonResponse({
             'run_id': run.id,
@@ -181,11 +183,23 @@ def start_run(request):
         return JsonResponse({'message': str(e)}, status=500)
 
 
-def _run_results_json(run):
+def unique_match_results_for_display(run):
+    """One row per resume: best score first; ties → newest MatchResult id."""
+    seen = set()
+    out = []
+    for r in run.results.select_related('resume').order_by('-final_score', '-id'):
+        if r.resume_id in seen:
+            continue
+        seen.add(r.resume_id)
+        out.append(r)
+    return out
+
+
+def run_results_json(run):
     """Serialize MatchResults for the run-detail poll API (partial rows while processing, final ranks when complete)."""
-    qs = run.results.select_related('resume').order_by('-final_score', 'id')
+    unique_results = unique_match_results_for_display(run)
     results_data = []
-    for idx, r in enumerate(qs, start=1):
+    for idx, r in enumerate(unique_results, start=1):
         display_rank = r.rank if run.status == 'complete' and r.rank > 0 else idx
         results_data.append({
             'id': r.id,
@@ -212,8 +226,10 @@ def run_status(request, run_id):
     try:
         run = MatchRun.objects.get(id=run_id)
 
-        if run.status in ('processing', 'pending'):
-            worker_pid = (run.scoring_config or {}).get('_worker_pid')
+        cfg = run.scoring_config or {}
+        # Must match key set in services.process_match_run (was _worker_pid in older runs)
+        worker_pid = cfg.get("worker_pid") or cfg.get("_worker_pid")
+        if run.status in ("processing", "pending"):
             worker_alive = False
             if worker_pid:
                 try:
@@ -221,22 +237,25 @@ def run_status(request, run_id):
                     worker_alive = True
                 except OSError:
                     pass
-            if not worker_alive and run.status == 'processing':
+            # Only restart if the worker process is gone — not when pid is missing from config
+            if not worker_alive and run.status == "processing" and worker_pid is not None:
                 run.results.all().delete()
-                run.status = 'pending'
+                run.status = "pending"
                 run.processed = 0
-                run.save(update_fields=['status', 'processed'])
-                _launch_run_worker(run.id)
+                run.save(update_fields=["status", "processed"])
+                launch_run_worker(run.id)
+                run.refresh_from_db()
 
-        # Expose rows during pending/processing so the UI is not blank for long LLM runs
-        results_data = _run_results_json(run) if run.results.exists() else []
-        return JsonResponse({
-            'status': run.status,
-            'processed': run.processed,
-            'total': run.total_resumes,
-            'progress_pct': run.progress_pct,
-            'results': results_data,
-        })
+        results_data = run_results_json(run) if run.results.exists() else []
+        return JsonResponse(
+            {
+                "status": run.status,
+                "processed": run.processed,
+                "total": run.total_resumes,
+                "progress_pct": run.progress_pct,
+                "results": results_data,
+            }
+        )
     except MatchRun.DoesNotExist:
         return JsonResponse({'message': 'Run not found.'}, status=404)
 
@@ -251,13 +270,51 @@ def rescore_run(request, run_id):
         run.processed = 0
         run.save(update_fields=['status', 'processed'])
 
-        _launch_run_worker(run.id)
+        launch_run_worker(run.id)
 
         return JsonResponse({'message': 'Re-scoring started.', 'run_id': run.id})
     except MatchRun.DoesNotExist:
         return JsonResponse({'message': 'Run not found.'}, status=404)
     except Exception as e:
         return JsonResponse({'message': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(['POST'])
+def delete_job_for_run(request, run_id):
+    """
+    Remove the Job tied to this run. CASCADE deletes every MatchRun, Resume, and MatchResult
+    for that job (typical app flow: one job per matching session).
+    """
+    try:
+        run = MatchRun.objects.select_related('job').get(id=run_id)
+        if run.status in ("pending", "processing"):
+            return JsonResponse(
+                {
+                    "message": "Cannot delete while the run is in progress. Wait until it completes or fails.",
+                },
+                status=400,
+            )
+        cfg = run.scoring_config or {}
+        pid = cfg.get("worker_pid") or cfg.get("_worker_pid")
+        if pid:
+            try:
+                os.kill(int(pid), signal.SIGTERM)
+            except (OSError, TypeError, ValueError):
+                pass
+        job = run.job
+        title = job.title
+        job.delete()
+        return JsonResponse(
+            {
+                "message": f'Job "{title}" and all related uploads/results were deleted.',
+                "redirect_url": reverse("dashboard"),
+                "showSnackbar": True,
+                "status": "success",
+            }
+        )
+    except MatchRun.DoesNotExist:
+        return JsonResponse({"message": "Run not found."}, status=404)
 
 
 @login_required

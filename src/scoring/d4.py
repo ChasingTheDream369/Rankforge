@@ -11,7 +11,7 @@ HOW: For each constraint, assess_constraint() returns 1.0|0.5|0.0. D4 = average.
 import re
 
 
-def _assess_constraint(constraint: str, evidence: str) -> float:
+def assess_constraint(constraint: str, evidence: str) -> float:
     """
     Deterministic: score one constraint against evidence. Returns 1.0 (met), 0.5 (partial), 0.0 (not met).
     Evidence = concatenation of resume profile fields (total_years, skills, highlights).
@@ -72,7 +72,7 @@ def _assess_constraint(constraint: str, evidence: str) -> float:
     return 0.0
 
 
-def _build_evidence(resume_profile: dict) -> str:
+def build_evidence(resume_profile: dict) -> str:
     """Concatenate resume fields for constraint matching."""
     parts = []
     if resume_profile.get("total_years"):
@@ -95,10 +95,10 @@ def compute_d4_from_profiles(jd_profile: dict, resume_profile: dict) -> tuple:
     if not constraints:
         return (1.0, [])
 
-    evidence = _build_evidence(resume_profile)
+    evidence = build_evidence(resume_profile)
     checks = []
     for c in constraints[:15]:
-        s = _assess_constraint(str(c), evidence)
+        s = assess_constraint(str(c), evidence)
         checks.append({"constraint": str(c)[:80], "score": s})
     avg = sum(x["score"] for x in checks) / len(checks)
     return (round(avg, 4), checks)

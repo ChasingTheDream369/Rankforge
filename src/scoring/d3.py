@@ -9,7 +9,7 @@ from src.scoring.llm_client import call_openai, parse_json, has_llm
 
 from matcherapp.apps.system_prompts.dimensions import D3_DOMAIN_FALLBACK_SYSTEM, D3_DOMAIN_FALLBACK_USER
 
-_D3_FALLBACK_TOOL = {
+D3_FALLBACK_TOOL = {
     "type": "function",
     "function": {
         "name": "submit_domain_fit_assessment",
@@ -46,19 +46,19 @@ def compute_d3_from_profiles(jd_profile: dict, resume_profile: dict) -> Optional
     return None
 
 
-def _call_d3_llm_fallback(jd_profile: dict, resume_profile: dict) -> tuple:
+def call_d3_llm_fallback(jd_profile: dict, resume_profile: dict) -> tuple:
     jd_domain = str(jd_profile.get("domain", "") or "other")
     resume_domains = resume_profile.get("domains") or ["other"]
     prompt = D3_DOMAIN_FALLBACK_USER.format(jd_domain=jd_domain, resume_domains=resume_domains)
     if not has_llm():
         return (0.2, "LLM fallback failed; default unrelated")
     try:
-        return _call_d3_fallback_openai(prompt)
+        return call_d3_fallback_openai(prompt)
     except Exception:
         return (0.2, "LLM fallback failed; default unrelated")
 
 
-def _call_d3_fallback_openai(prompt: str) -> tuple:
+def call_d3_fallback_openai(prompt: str) -> tuple:
     from openai import OpenAI
     from src.config import OPENAI_API_KEY
     client = OpenAI(api_key=OPENAI_API_KEY)
@@ -66,7 +66,7 @@ def _call_d3_fallback_openai(prompt: str) -> tuple:
     for _ in range(3):
         resp = client.chat.completions.create(
             model=EXTRACTION_MODEL, messages=msgs, max_tokens=150, temperature=0,
-            tools=[_D3_FALLBACK_TOOL], tool_choice={"type": "function", "function": {"name": "submit_domain_fit_assessment"}},
+            tools=[D3_FALLBACK_TOOL], tool_choice={"type": "function", "function": {"name": "submit_domain_fit_assessment"}},
         )
         msg = resp.choices[0].message
         if msg.tool_calls:
@@ -93,7 +93,7 @@ def compute_d3(jd_profile: dict, resume_profile: dict, use_llm_fallback: bool = 
         return out
     if use_llm_fallback and has_llm():
         try:
-            return _call_d3_llm_fallback(jd_profile, resume_profile)
+            return call_d3_llm_fallback(jd_profile, resume_profile)
         except Exception:
             pass
     return (0.2, "Not in ontology; LLM fallback disabled or failed")

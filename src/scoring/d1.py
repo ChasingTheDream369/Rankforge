@@ -8,11 +8,11 @@ from src.scoring.llm_client import parse_json, has_llm
 
 from matcherapp.apps.system_prompts.dimensions import D1_SKILL_FIT_SYSTEM, D1_SKILL_FIT_USER
 
-_D1_EXACT = {"BUILT_WITH": 1.0, "USED": 0.7, "LISTED": 0.3}
-_D1_ADJACENT = {"BUILT_WITH": 0.6, "USED": 0.5, "LISTED": 0.2}
-_D1_GROUP = {"BUILT_WITH": 0.3, "USED": 0.25, "LISTED": 0.1}
+D1_EXACT = {"BUILT_WITH": 1.0, "USED": 0.7, "LISTED": 0.3}
+D1_ADJACENT = {"BUILT_WITH": 0.6, "USED": 0.5, "LISTED": 0.2}
+D1_GROUP = {"BUILT_WITH": 0.3, "USED": 0.25, "LISTED": 0.1}
 
-_D1_FALLBACK_TOOL = {
+D1_FALLBACK_TOOL = {
     "type": "function",
     "function": {
         "name": "submit_skill_fit_assessment",
@@ -26,7 +26,7 @@ _D1_FALLBACK_TOOL = {
 }
 
 
-def _get_ontology_adjacent_canonicals(canonical_skill: str) -> set:
+def get_ontology_adjacent_canonicals(canonical_skill: str) -> set:
     try:
         from src.ingestion.ontology import SKILL_ONTOLOGY
     except Exception:
@@ -43,7 +43,7 @@ def _get_ontology_adjacent_canonicals(canonical_skill: str) -> set:
     return adj
 
 
-def _get_ontology_group(canonical_skill: str) -> Optional[str]:
+def get_ontology_group(canonical_skill: str) -> Optional[str]:
     try:
         from src.ingestion.ontology import SKILL_ONTOLOGY
     except Exception:
@@ -54,7 +54,7 @@ def _get_ontology_group(canonical_skill: str) -> Optional[str]:
     return None
 
 
-def _get_ontology_skills_in_group(group_name: str) -> set:
+def get_ontology_skills_in_group(group_name: str) -> set:
     try:
         from src.ingestion.ontology import SKILL_ONTOLOGY
     except Exception:
@@ -62,7 +62,7 @@ def _get_ontology_skills_in_group(group_name: str) -> set:
     return {m["canonical"] for m in SKILL_ONTOLOGY.values() if m.get("group") == group_name}
 
 
-def _call_d1_skill_fit_tool(skill_name: str, resume_profile: dict) -> float:
+def call_d1_skill_fit_tool(skill_name: str, resume_profile: dict) -> float:
     if not has_llm():
         return 0.0
     skills_summary = ", ".join(
@@ -73,12 +73,12 @@ def _call_d1_skill_fit_tool(skill_name: str, resume_profile: dict) -> float:
     context = f"Skills: {skills_summary[:400]}. Highlights: {highlights[:300]}"
     prompt = D1_SKILL_FIT_USER.format(skill_name=skill_name, context=context)
     try:
-        return _call_d1_fallback_openai(prompt)
+        return call_d1_fallback_openai(prompt)
     except Exception:
         return 0.0
 
 
-def _call_d1_fallback_openai(prompt: str) -> float:
+def call_d1_fallback_openai(prompt: str) -> float:
     from openai import OpenAI
     from src.config import OPENAI_API_KEY
     client = OpenAI(api_key=OPENAI_API_KEY)
@@ -86,7 +86,7 @@ def _call_d1_fallback_openai(prompt: str) -> float:
     for _ in range(3):
         resp = client.chat.completions.create(
             model=EXTRACTION_MODEL, messages=msgs, max_tokens=100, temperature=0,
-            tools=[_D1_FALLBACK_TOOL], tool_choice={"type": "function", "function": {"name": "submit_skill_fit_assessment"}},
+            tools=[D1_FALLBACK_TOOL], tool_choice={"type": "function", "function": {"name": "submit_skill_fit_assessment"}},
         )
         msg = resp.choices[0].message
         if msg.tool_calls:
@@ -139,33 +139,33 @@ def compute_d1_from_profiles(jd_profile: dict, resume_profile: dict, use_llm_fal
 
         if name in resume_lookup:
             level, evidence = resume_lookup[name]
-            score = _D1_EXACT.get(level, 0.3)
+            score = D1_EXACT.get(level, 0.3)
             weighted_sum += score * w
             if is_core and score > 0:
                 core_matched += 1
             checked.append({"jd_skill": name, "resume_match": name, "match_type": "exact", "level": level, "score": score, "evidence": evidence, "importance": "core" if is_core else "nice"})
             continue
 
-        adj = _get_ontology_adjacent_canonicals(name)
+        adj = get_ontology_adjacent_canonicals(name)
         adj_match = adj & resume_names
         if adj_match:
             match_name = next(iter(adj_match))
             level, evidence = resume_lookup[match_name]
-            score = _D1_ADJACENT.get(level, 0.2)
+            score = D1_ADJACENT.get(level, 0.2)
             weighted_sum += score * w
             if is_core and score > 0:
                 core_matched += 1
             checked.append({"jd_skill": name, "resume_match": match_name, "match_type": "adjacent", "level": level, "score": score, "evidence": evidence, "importance": "core" if is_core else "nice"})
             continue
 
-        jd_group = _get_ontology_group(name)
+        jd_group = get_ontology_group(name)
         if jd_group:
-            group_skills = _get_ontology_skills_in_group(jd_group)
+            group_skills = get_ontology_skills_in_group(jd_group)
             group_match = (group_skills & resume_names) - {name}
             if group_match:
                 match_name = next(iter(group_match))
                 level, evidence = resume_lookup[match_name]
-                score = _D1_GROUP.get(level, 0.1)
+                score = D1_GROUP.get(level, 0.1)
                 weighted_sum += score * w
                 if is_core and score > 0:
                     core_matched += 1
@@ -176,7 +176,7 @@ def compute_d1_from_profiles(jd_profile: dict, resume_profile: dict, use_llm_fal
         match_type = "absent"
         if use_llm_fallback and has_llm():
             try:
-                score = _call_d1_skill_fit_tool(name, resume_profile)
+                score = call_d1_skill_fit_tool(name, resume_profile)
                 if score > 0:
                     match_type = "llm_fallback"
                     weighted_sum += score * w
