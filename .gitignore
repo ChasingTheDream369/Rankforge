@@ -44,6 +44,8 @@ venv.bak/
 # ── Django ───────────────────────────────────────────────────────────────────
 *.log
 local_settings.py
+**/migrations/*.py
+!**/migrations/__init__.py
 db.sqlite3
 db.sqlite3-journal
 media/
