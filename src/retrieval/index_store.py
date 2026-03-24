@@ -25,11 +25,15 @@ from pathlib import Path
 
 from src.config import EMBEDDING_MODEL
 INDEX_DIR = "data/index"
+
+
 def compute_corpus_hash(documents: Dict[str, str]) -> str:
     """Hash the corpus to detect changes since last index build."""
     sorted_items = sorted(documents.items())
     content = json.dumps(sorted_items)
     return hashlib.sha256(content.encode()).hexdigest()[:16]
+
+
 class IndexStore:
     """
     Persistent index with automatic cache invalidation.

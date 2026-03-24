@@ -33,6 +33,7 @@ except ImportError:
 # Cost Tracker
 # ============================================================
 
+
 @pytest.mark.skipif(not HAS_COST_TRACKER, reason="cost_tracker not installed")
 class TestCostTracker:
     def test_basic(self):
@@ -123,6 +124,8 @@ class TestHashing:
         h = compute_config_hash()
         assert isinstance(h, str)
         assert len(h) > 0
+
+
 class TestSelectionRates:
     def test_all_selected(self):
         rates = compute_selection_rates({"A": [0.8, 0.9, 0.7]}, threshold=0.5)
@@ -135,6 +138,8 @@ class TestSelectionRates:
     def test_partial(self):
         rates = compute_selection_rates({"A": [0.8, 0.3, 0.6]}, threshold=0.5)
         assert rates["A"] == pytest.approx(2/3, abs=0.01)
+
+
 class TestImpactRatios:
     def test_equal_rates(self):
         ratios = compute_impact_ratios({"A": 0.8, "B": 0.8})
@@ -147,6 +152,8 @@ class TestImpactRatios:
 
     def test_empty(self):
         assert compute_impact_ratios({}) == {}
+
+
 class TestFourFifthsRule:
     def test_compliant(self):
         violations = check_four_fifths_rule({"A": 1.0, "B": 0.85})
@@ -160,6 +167,8 @@ class TestFourFifthsRule:
     def test_critical_violation(self):
         violations = check_four_fifths_rule({"A": 1.0, "B": 0.3})
         assert violations[0]["severity"] == "CRITICAL"
+
+
 class TestBiasAuditReport:
     def test_compliant_report(self):
         report = generate_bias_audit_report(
@@ -179,6 +188,8 @@ class TestBiasAuditReport:
     def test_poc_mode_no_data(self):
         report = generate_bias_audit_report()
         assert "POC MODE" in report.recommendations[0]
+
+
 class TestAuditRecord:
     def test_create_record(self):
         results = [
@@ -216,6 +227,7 @@ class TestAuditRecord:
 # ============================================================
 # MCP Server
 # ============================================================
+
 
 class TestMCPServer:
     def setup_method(self):
@@ -286,6 +298,7 @@ class TestMCPServer:
 # Index Store
 # ============================================================
 
+
 class TestIndexStore:
     def test_corpus_hash_deterministic(self):
         docs = {"a": "hello", "b": "world"}
@@ -353,5 +366,7 @@ class TestIndexStore:
             stats = store.get_stats()
             assert stats["num_documents"] == 1
             assert stats["embedding_model"] is not None
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

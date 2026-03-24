@@ -33,6 +33,7 @@ from src.config import LLM_PROVIDER, OPENAI_API_KEY, OPENAI_MODEL, OPENAI_TEMPER
 ESCO_AVAILABLE = False
 _esco_extractor = None
 
+
 def get_esco_extractor():
     """Lazy-load ESCO extractor (downloads model on first use)."""
     global ESCO_AVAILABLE, _esco_extractor
@@ -51,6 +52,8 @@ def get_esco_extractor():
         print(f"  ESCO extractor failed to load: {e}")
         ESCO_AVAILABLE = False
         return None
+
+
 def extract_skills_esco(text: str) -> Optional[List[str]]:
     """
     Extract skills using ESCO taxonomy via cosine similarity.
@@ -66,6 +69,8 @@ def extract_skills_esco(text: str) -> Optional[List[str]]:
     except Exception as e:
         print(f"  ESCO extraction failed: {e}")
     return None
+
+
 def extract_occupations_esco(text: str) -> Optional[List[str]]:
     """
     Extract occupations using ESCO taxonomy via cosine similarity.
@@ -87,6 +92,7 @@ def extract_occupations_esco(text: str) -> Optional[List[str]]:
 # Each entry has: canonical form, group, adjacent skills, parent concept(s), importance (1-5 O*NET scale)
 # Parent concepts enable graph expansion before retrieval
 # Importance weights enable weighted scoring (missing a critical skill penalizes more)
+
 
 SKILL_ONTOLOGY = {
     # Programming Languages — parent: "software development"
@@ -171,6 +177,8 @@ SKILL_ONTOLOGY = {
     "deep learning":{"canonical": "deep_learning","group": "ml",               "adjacent": ["pytorch", "tensorflow"], "parents": ["artificial intelligence", "machine learning"], "importance": 4},
     "nlp":          {"canonical": "nlp",          "group": "ml",               "adjacent": ["machine learning"], "parents": ["artificial intelligence", "machine learning"], "importance": 4},
 }
+
+
 def extract_skills_ontology(text: str) -> Set[str]:
     """Extract canonical skills from text using ontology lookup."""
     text_lower = text.lower()
@@ -181,6 +189,8 @@ def extract_skills_ontology(text: str) -> Set[str]:
         if re.search(pattern, text_lower):
             found.add(SKILL_ONTOLOGY[surface_form]["canonical"])
     return found
+
+
 def expand_with_hierarchy(skills: Set[str]) -> Set[str]:
     """
     Graph expansion: for each extracted skill, walk up the ontology hierarchy
@@ -200,6 +210,8 @@ def expand_with_hierarchy(skills: Set[str]) -> Set[str]:
                     expanded.add(parent)
                 break
     return expanded
+
+
 def get_skill_importance(canonical_skill: str) -> float:
     """
     Get O*NET-style importance weight (1-5) for a canonical skill.
@@ -218,6 +230,8 @@ def get_skill_importance(canonical_skill: str) -> float:
         if meta["canonical"] == canonical_skill:
             return meta.get("importance", 3) / 5.0
     return 0.6  # default: moderate importance
+
+
 def compute_skill_overlap(jd_skills: Set[str], resume_skills: Set[str]) -> dict:
     """
     Three-tier skill overlap: exact (1.0) → adjacent (0.6) → group (0.3).
@@ -277,6 +291,7 @@ def compute_skill_overlap(jd_skills: Set[str], resume_skills: Set[str]) -> dict:
     }
 # === LLM-based structured extraction (richer than ontology alone) ===
 
+
 EXTRACTION_PROMPT = """Extract structured information from this resume/job description text.
 Return ONLY valid JSON — no markdown fences, no preamble:
 {
@@ -291,6 +306,8 @@ Return ONLY valid JSON — no markdown fences, no preamble:
 Map synonyms to canonical forms (e.g., "data ingestion workflows" → "ETL pipelines").
 TEXT:
 """
+
+
 def parse_llm_json(raw: str) -> Optional[dict]:
     raw = raw.strip()
     raw = re.sub(r'^```(?:json)?\s*', '', raw)
@@ -305,6 +322,8 @@ def parse_llm_json(raw: str) -> Optional[dict]:
             except json.JSONDecodeError:
                 pass
     return None
+
+
 def extract_skills_llm(text: str) -> Optional[dict]:
     """LLM-based structured extraction — OpenAI only."""
     if LLM_PROVIDER == "openai" and OPENAI_API_KEY:
@@ -324,6 +343,8 @@ def extract_skills_llm(text: str) -> Optional[dict]:
             print(f"  OpenAI extraction failed: {e}")
 
     return None
+
+
 def extract_skills_regex(text: str) -> dict:
     """Fallback regex extraction when no LLM is available."""
     text_lower = text.lower()
@@ -350,6 +371,8 @@ def extract_skills_regex(text: str) -> dict:
         "domain": "unknown",
         "seniority": "unknown",
     }
+
+
 def extract_skills_structured(text: str) -> dict:
     """
     Extract structured skills + occupations.

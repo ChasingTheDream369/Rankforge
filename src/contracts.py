@@ -4,6 +4,8 @@ Pipeline Data Contracts — enforced schemas at every stage boundary.
 
 from dataclasses import dataclass, field
 from typing import List, Optional
+
+
 @dataclass
 class SkillEvidence:
     """Single evidence item linking a JD requirement to resume content."""
@@ -23,6 +25,8 @@ class SkillEvidence:
             "confidence": self.confidence,
             "strength": self.strength,
         }
+
+
 @dataclass
 class MatchRationale:
     """Complete explanation for a single match."""
@@ -57,6 +61,8 @@ class MatchRationale:
                 lines.append(f"    ! {f}")
 
         return "\n".join(lines)
+
+
 @dataclass
 class ThreatReport:
     """Adversarial assessment for a single resume."""
@@ -70,6 +76,8 @@ class ThreatReport:
     duplicate_content_ratio: float = 0.0
     keyword_stuffing_score: float = 0.0
     flags: List[str] = field(default_factory=list)
+
+
 @dataclass
 class MatchResult:
     """Complete scored output for a single resume against a JD."""

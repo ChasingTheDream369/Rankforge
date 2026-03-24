@@ -20,6 +20,8 @@ from collections import Counter
 from typing import List, Optional, Dict
 
 from src.config import FEEDBACK_DIR
+
+
 @dataclass
 class RecruiterFeedback:
     """Single feedback entry from a recruiter."""
@@ -44,6 +46,8 @@ class RecruiterFeedback:
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+
 class FeedbackStore:
     """Immutable JSONL feedback log."""
 
@@ -73,6 +77,8 @@ class FeedbackStore:
 
     def count(self) -> int:
         return len(self.load_all())
+
+
 class FeedbackAnalyzer:
     """Analyze feedback to find scoring calibration errors and patterns."""
 
@@ -129,6 +135,8 @@ class FeedbackAnalyzer:
             "advance_reasons": dict(advance_reasons.most_common(10)),
             "reject_reasons": dict(reject_reasons.most_common(10)),
         }
+
+
 def compile_feedback_context(store: FeedbackStore, job_id: str = None) -> dict:
     """Compile feedback into a context object for the next scoring run."""
     analyzer = FeedbackAnalyzer(store)
@@ -158,6 +166,8 @@ def compile_feedback_context(store: FeedbackStore, job_id: str = None) -> dict:
         "patterns": patterns,
         "weight_adjustments": weight_adjustments,
     }
+
+
 def apply_weight_adjustments(base_weights: dict, context: dict) -> dict:
     """
     Apply feedback-derived weight adjustments with safety bounds.

@@ -16,21 +16,23 @@
 
 ### Background
 
-Resume and JD matching sits at the intersection of **information retrieval**, **structured scoring**, and **fairness**: keyword-only filters and opaque rankers routinely mis-rank or exclude people; regulators increasingly expect **auditability** for automated employment tools. RankForge is an open codebase to explore **explainable** matching—scores you can trace to evidence and dimensions—not a black-box relevance label.
+Resume–JD matching sits at the intersection of **information retrieval**, **structured scoring**, and **governance**. Legacy hiring stacks often combine **keyword-first** ATS filters with opaque rankers. That pairing creates well-studied failure modes: **synonym blindness** (the same capability expressed in different words scores as a miss) and **false negatives at scale**—Harvard Business School & Accenture’s *Hidden Workers: Untapped Talent* (2021) estimates on the order of **27 million** workers in the United States are marginalized by how automated filters and rigid screening interact with qualified candidates who do not match narrow keyword templates. Stakeholders also resist **black-box** rankings when scores cannot be tied to **evidence** in the source documents. Regulators are moving in parallel: the **EU AI Act** classifies AI intended for **recruitment and workforce decisions** as **high-risk** (Article 6 and Annex III), and **NYC Local Law 144** requires **independent bias audits** of covered automated employment decision tools, including **impact ratio** analysis consistent with the EEOC **four-fifths** rule. RankForge is an open codebase aimed at **explainable** matching: **dimensions, evidence, and tests**—not a single unexplained scalar.
+
+**Citations (background):** [1] Joseph B. Fuller et al., *Hidden Workers: Untapped Talent*, Harvard Business School & Accenture (2021). [2] Regulation (EU) 2024/1689 (AI Act), Art. 6 & Annex III (employment / workers management). [3] NYC Admin. Code §20-870 *et seq.* (Local Law 144 on automated employment decision tools). Full bibliography: [References](docs/reference.md#references).
 
 ### Problem
 
-Manual review **does not scale** with applicant volume. Fully automated pipelines without structure drift toward **unpredictable** judgments and **weak audit trails**. The core problem this repo tackles is: **rank candidates against a JD with explicit, inspectable reasons**, not only a single scalar “match score.”
+**Volume** overwhelms manual review; **automation without structure** drifts toward brittle or un-auditable judgments. Candidates and tools are also locked in an **arms race**: keyword stuffing, hidden text, and prompt-style manipulation degrade signal if ingestion is naive. The core problem this repo tackles is: **rank resumes against a JD with explicit, inspectable reasons** (skills, seniority, domain, constraints) combined with retrieval relevance—so a reviewer can see **why** a row sits where it does, and the stack can be **evaluated** like software, not only demo’d.
 
 ### Issues
 
-Several tensions show up in practice:
+Several tensions drive the design:
 
-- **Consistency** — different reviewers (or runs) should not wildly disagree on the same resume–JD pair when evidence is stable.
-- **Gaming & noise** — injected prompts, hidden text, keyword stuffing, and non-resume documents need **detection and penalties**, not silent boosts.
-- **Retrieval vs understanding** — lexical-only methods miss semantics; semantic-only methods miss exact tokens; a **hybrid** path with re-ranking is needed.
-- **Explainability vs cost** — deep models help relevance but **structured dimensions** (skills, seniority, domain, constraints) keep scores legible for review and tuning.
-- **Calibration** — weights and fusion knobs should eventually be **fit to labeled data**, not only hand-tuned (see [Future Steps](docs/reference.md#future-steps--production-roadmap)).
+- **Lexical vs semantic** — Boolean-style matching misses paraphrases; embedding-only shortcuts can miss must-have tokens. RankForge uses **BM25 + dense bi-encoder + RRF + cross-encoder** so exact terms and meaning are both represented.
+- **Integrity of the document** — prompt injection, invisible text, JD duplication, keyword stuffing, and non-resume files need **sanitization and penalties** before scores are trusted.
+- **Trust & oversight** — final outputs should pair **numbers with evidence** (skills, quotes, threat flags) so hiring teams are not asked to trust a lone opaque grade; roadmap hooks include fairness-style metrics (see [reference](docs/reference.md#future-steps--production-roadmap)).
+- **Stability** — the same resume–JD pair should not swing wildly when evidence is unchanged; bounded LLM use and deterministic merges help.
+- **Calibration** — fusion weights and hyperparameters should eventually be **fit to labeled data**, not only hand-tuned (see [Future Steps](docs/reference.md#future-steps--production-roadmap)).
 
 ### Solution
 
@@ -53,7 +55,7 @@ The **next wave** is principled **calibration**: joint tuning of dimension weigh
 
 ### Context (architecture & narrative)
 
-For a **readable walkthrough** of the design (figures, layers, and rationale), see **[Architecture_Document.pdf](Architecture_Document.pdf)** in the repo root. The LaTeX source is [`docs/architecture.tex`](docs/architecture.tex) if you want to rebuild or cite sections. Screens from the web UI are under [`docs/rankforge_screens/`](docs/rankforge_screens/).
+For a **readable walkthrough** of the design (figures, layers, and rationale), see **[Architecture_Document.pdf](Architecture_Document.pdf)** in the repo root. The LaTeX source is [`docs/architecture.tex`](docs/architecture.tex) if you want to rebuild or cite sections. Screens from the web UI are under [`docs/rankforge_screens/`](docs/rankforge_screens/). **Deeper background** (labor-market and regulatory framing, adversarial hiring-tech notes, and slide narrative) lives alongside the code in **`docs/`** as research memos and presentation materials—use them if you need the full literature-style chain behind the abstractions above.
 
 ---
 

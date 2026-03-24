@@ -41,6 +41,7 @@ FAIRNESS_FOUR_FIFTHS_THRESHOLD = max(0.1, min(1.0, FAIRNESS_FOUR_FIFTHS_THRESHOL
 # EU AI Act — Immutable Audit Trail
 # ============================================================
 
+
 @dataclass
 class AuditRecord:
     """
@@ -72,9 +73,13 @@ class AuditRecord:
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+
 def compute_hash(text: str) -> str:
     """SHA256 hash for content integrity verification."""
     return hashlib.sha256(text.encode('utf-8')).hexdigest()[:16]
+
+
 def compute_config_hash() -> str:
     """Hash the config module to detect configuration drift between runs."""
     try:
@@ -83,6 +88,8 @@ def compute_config_hash() -> str:
             return compute_hash(f.read())
     except Exception:
         return "unknown"
+
+
 def create_audit_record(
     jd_id: str,
     jd_text: str,
@@ -136,6 +143,8 @@ def create_audit_record(
         cost_summary=cost_summary or {},
         hitl_required=hitl_required,
     )
+
+
 def save_audit_record(record: AuditRecord) -> str:
     """Append audit record to immutable log. Returns filepath."""
     os.makedirs(AUDIT_DIR, exist_ok=True)
@@ -143,6 +152,8 @@ def save_audit_record(record: AuditRecord) -> str:
     with open(log_path, 'a') as f:
         f.write(json.dumps(record.to_dict()) + '\n')
     return log_path
+
+
 def load_audit_history() -> List[dict]:
     """Load all audit records for compliance review."""
     log_path = os.path.join(AUDIT_DIR, "audit_log.jsonl")
@@ -154,6 +165,8 @@ def load_audit_history() -> List[dict]:
             if line.strip():
                 records.append(json.loads(line))
     return records
+
+
 def verify_reproducibility(record: AuditRecord, current_config_hash: str) -> dict:
     """
     Check if a past run can be reproduced with current system state.
@@ -174,6 +187,7 @@ def verify_reproducibility(record: AuditRecord, current_config_hash: str) -> dic
 # ============================================================
 # NYC Local Law 144 — Bias Auditing
 # ============================================================
+
 
 @dataclass
 class BiasAuditReport:
@@ -198,6 +212,8 @@ class BiasAuditReport:
     total_candidates_evaluated: int = 0
     selection_threshold: float = 0.5
     four_fifths_threshold: float = 0.8
+
+
 def compute_selection_rates(
     scores_by_group: Dict[str, List[float]],
     threshold: float = 0.5,
@@ -210,6 +226,8 @@ def compute_selection_rates(
         else:
             rates[group] = 0.0
     return rates
+
+
 def compute_impact_ratios(selection_rates: Dict[str, float]) -> Dict[str, float]:
     """
     Impact ratio = selection_rate(group) / selection_rate(highest_group).
@@ -221,6 +239,8 @@ def compute_impact_ratios(selection_rates: Dict[str, float]) -> Dict[str, float]
     if max_rate == 0:
         return {g: 0.0 for g in selection_rates}
     return {g: round(r / max_rate, 4) for g, r in selection_rates.items()}
+
+
 def check_four_fifths_rule(
     impact_ratios: Dict[str, float],
     threshold: Optional[float] = None,
@@ -239,6 +259,8 @@ def check_four_fifths_rule(
                                    else "Monitor and investigate root cause",
             })
     return violations
+
+
 def generate_bias_audit_report(
     sex_scores: Dict[str, List[float]] = None,
     ethnicity_scores: Dict[str, List[float]] = None,
@@ -309,6 +331,8 @@ def generate_bias_audit_report(
         ]
 
     return report
+
+
 def save_bias_report(report: BiasAuditReport) -> str:
     """Save bias audit report for regulatory compliance."""
     os.makedirs(BIAS_REPORT_DIR, exist_ok=True)
@@ -316,6 +340,8 @@ def save_bias_report(report: BiasAuditReport) -> str:
     with open(path, 'w') as f:
         json.dump(asdict(report), f, indent=2)
     return path
+
+
 def print_bias_report(report: BiasAuditReport) -> None:
     """Print bias audit report for terminal review."""
     print(f"\n{'=' * 70}")

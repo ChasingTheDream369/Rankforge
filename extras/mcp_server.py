@@ -199,6 +199,7 @@ RESOURCE_REGISTRY = {
 # MCP Server Implementation
 # ============================================================
 
+
 @dataclass
 class MCPRequest:
     """JSON-RPC 2.0 request."""
@@ -206,6 +207,8 @@ class MCPRequest:
     method: str = ""
     params: dict = field(default_factory=dict)
     id: int = 0
+
+
 @dataclass
 class MCPResponse:
     """JSON-RPC 2.0 response."""
@@ -221,6 +224,8 @@ class MCPResponse:
         else:
             d["result"] = self.result
         return d
+
+
 class MCPServer:
     """
     Lightweight MCP server exposing the matching engine as discoverable tools.
@@ -432,6 +437,8 @@ class MCPServer:
                 "text": f"STUB: Would send top candidates for JD={args.get('jd_id', '?')} "
                         f"to Slack channel={args.get('channel', '#hiring')}. "
                         "Connect Slack MCP server for live execution."}]}
+
+
 if __name__ == "__main__":
     server = MCPServer()
 

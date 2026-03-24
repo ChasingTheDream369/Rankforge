@@ -88,6 +88,7 @@ def resolve_dimension_weights(
             return t
     return get_dimension_weights(jd_profile)
 
+
 # Stage 2 prompts
 _SCORING_SYSTEM = (
     "You are a senior technical recruiter scoring candidates against job requirements. "
@@ -123,6 +124,7 @@ def _get_few_shot_examples(jd_profile: Optional[dict] = None) -> str:
     if "ai" in domain or "ml" in domain or "machine" in domain or "llm" in domain:
         return _FEW_SHOT_AI_ML
     return _FEW_SHOT_FINTECH
+
 
 _SCORING_CRITERIA = """
 ## SCORING CRITERIA (use for all 4 dimensions)

@@ -16,8 +16,12 @@ PRICING = {
     "claude-sonnet-4-20250514": {"input": 3.00, "output": 15.00},
     "local": {"input": 0.0, "output": 0.0},
 }
+
+
 class BudgetExceededError(Exception):
     pass
+
+
 @dataclass
 class APICall:
     stage: str
@@ -28,6 +32,8 @@ class APICall:
     latency_ms: float
     success: bool
     error: Optional[str] = None
+
+
 class CostTracker:
     def __init__(self, budget_limit: float = 5.00):
         self.budget_limit = budget_limit

@@ -4,6 +4,8 @@ No LLM calls. Deterministic: same inputs produce same output.
 """
 
 from src.contracts import MatchRationale
+
+
 def generate_rationale(name, score, confidence, recommendation,
                        skill_detail=None, threat_flags=None, **kwargs):
     """Generate explanation from skill overlap analysis."""

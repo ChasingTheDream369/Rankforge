@@ -20,8 +20,11 @@ from src.config import (
 
 # Logit value for docs that never passed through CE → sigmoid ≈ 0 (no CE contribution)
 NO_CE_LOGIT = -10.0
+
+
 def tokenize(text: str) -> List[str]:
     return re.findall(r'\b\w+\b', text.lower())
+
 
 # OpenAI text-embedding-3-small: 8191 tokens per input. ~1 token ≈ 4 chars (English),
 # so 8191 × 4 ≈ 32k chars max. We use 6000 (~1500 tokens) to stay well under the limit
@@ -46,6 +49,8 @@ def openai_embed(texts: List[str]) -> np.ndarray:
     norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
     norms[norms == 0] = 1
     return embeddings / norms
+
+
 class RetrievalEngine:
     """Hybrid retrieval with BM25 + dense bi-encoder + RRF + cross-encoder."""
 

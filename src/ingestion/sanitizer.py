@@ -47,6 +47,8 @@ HOMOGLYPH_MAP = {
     '\u0430': 'a', '\u0435': 'e', '\u043e': 'o', '\u0440': 'p',
     '\u0441': 'c', '\u0443': 'y', '\u0445': 'x', '\u0456': 'i',
 }
+
+
 def detect_injections(text: str) -> Tuple[str, List[dict], float]:
     """Detect and strip prompt injections. Returns (cleaned, attempts, penalty)."""
     attempts = []
@@ -65,10 +67,14 @@ def detect_injections(text: str) -> Tuple[str, List[dict], float]:
         cleaned = re.sub(pattern, ' ', cleaned, flags=re.DOTALL)
 
     return cleaned, attempts, penalty
+
+
 def strip_invisible(text: str) -> Tuple[str, int]:
     """Remove zero-width and invisible unicode. Returns (cleaned, count)."""
     matches = INVISIBLE_CHARS.findall(text)
     return INVISIBLE_CHARS.sub('', text), len(matches)
+
+
 def normalize_homoglyphs(text: str) -> Tuple[str, int]:
     """Replace Cyrillic homoglyphs with Latin equivalents."""
     count = 0
@@ -78,6 +84,8 @@ def normalize_homoglyphs(text: str) -> Tuple[str, int]:
             chars[i] = HOMOGLYPH_MAP[ch]
             count += 1
     return ''.join(chars), count
+
+
 def detect_jd_duplication(resume_text: str, jd_text: str) -> float:
     """Detect copy-pasted JD content via 4-gram overlap ratio."""
     if not jd_text.strip() or not resume_text.strip():
@@ -89,6 +97,8 @@ def detect_jd_duplication(resume_text: str, jd_text: str) -> float:
     if not jd_ng:
         return 0.0
     return len(jd_ng & ngrams(resume_text)) / len(jd_ng)
+
+
 def detect_keyword_stuffing(text: str) -> float:
     """Detect abnormal keyword density (0.0=normal, 1.0=heavily stuffed)."""
     words = text.lower().split()
@@ -109,6 +119,8 @@ def detect_keyword_stuffing(text: str) -> float:
     if density > 0.08 and ratio > 5:
         return min(0.9, density * 5)
     return 0.0
+
+
 def detect_experience_inflation(text: str) -> float:
     """Detect claimed years vs actual timeline span."""
     text_lower = text.lower()
@@ -122,6 +134,8 @@ def detect_experience_inflation(text: str) -> float:
         if max_claimed > actual_span + 2:
             return min(0.7, (max_claimed - actual_span) * 0.15)
     return 0.0
+
+
 def detect_credential_anomaly(text: str) -> float:
     """Flag suspiciously dense certification listings (>7)."""
     certs = set()
@@ -132,11 +146,14 @@ def detect_credential_anomaly(text: str) -> float:
     if len(certs) > 7:
         return min(0.6, (len(certs) - 7) * 0.1)
     return 0.0
+
+
 RESUME_MARKERS = re.compile(
     r'(?i)\b(experience|education|skills|summary|objective|work history|employment|'
     r'projects?|certifications?|achievements?|bachelor|master|university|college|'
     r'github|linkedin|portfolio|contact|email|phone|\d{4}\s*[-–]\s*(present|\d{4}))\b'
 )
+
 
 def detect_non_resume(text: str) -> float:
     """Flag documents that lack basic resume markers — likely a wrong file upload."""

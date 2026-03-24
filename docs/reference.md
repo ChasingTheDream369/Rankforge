@@ -189,6 +189,8 @@ If a larger, labeled dataset were available, we would:
 
 ## Challenges Overcome & Solutions
 
+The table below maps **documented failure modes** in keyword-only ATS paths and naive LLM-only wrappers—**synonym blindness**, **adversarial gaming**, **historical bias in training targets**, **cost/latency at scale**—to concrete mechanisms in this repo. The intent is the same as in the research notes: **defensible ingestion**, **hybrid retrieval**, **grounded scoring**, and **inspectable outputs** rather than a single end-to-end generative grade.
+
 | Challenge | Solution |
 |-----------|----------|
 | **Adversarial documents rank #1** (e.g. 70K academic paper with every keyword) | L0 sanitization + `is_resume` LLM gate; continuous penalty instead of binary reject; adversarial docs get high penalty and low/zero score |
@@ -207,7 +209,7 @@ If a larger, labeled dataset were available, we would:
 
 **Calibration priority.** The current codebase keeps the **base scorer stable** (same formulas and evidence paths). The next improvement pass is to **discover weights and ordering of signals jointly**: dimension weights (D1–D4), CE blend α, retrieval fusion (RRF *k*, CE pool cut), and optional score floors/caps — fitted with **combined regression or constrained grid search** on golden labels, ablation JSON, and adversarial uploads so nDCG / Spearman and “gaming resistance” move together. Other high-value items: wire `cost_tracker` to per-run DB totals, expand few-shot banks per industry, richer confidence calibration (skill evidence + CE–dim divergence), and optional demographic-aware fairness dashboards (impact ratio already implemented; threshold is configurable — see env table).
 
-### Phase 1 — Demo-Ready
+### Phase 1 — Calibration & visibility
 
 - **Combined regression / grid search** — Joint optimization of D1–D4 weights, CE weight, and key retrieval hyperparameters against `golden_dataset.jsonl` + adversarial suite; primary objective nDCG@10 / Spearman, secondary robustness on ablation resumes
 - **Surface full profiles in UI** — Optional collapsible `jd_profile` / `resume_profile` JSON for auditors (skill table already shown when populated)
