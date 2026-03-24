@@ -784,6 +784,8 @@ resume_matcher/
 | Evaluation metrics | nDCG, MRR, P@k, Spearman, impact_ratio |
 | Agentic retry | 1 bounded re-score on LOW confidence |
 
+<a id="literature-review-notes"></a>
+
 ### Literature review & working notes (author)
 
 Problem framing and literature survey for this project were developed across two working Google Docs (iterated in parallel; together they formed the hybrid basis for the design). **Primary links:**
@@ -791,7 +793,7 @@ Problem framing and literature survey for this project were developed across two
 - [Literature / background notes (1)](https://docs.google.com/document/d/1q2nIq1jjj6TZWj34VNzcHCo-4lkws7abH68tE6d485Q/edit?usp=sharing)
 - [Literature / background notes (2)](https://docs.google.com/document/d/1eIZ9NAsMdAaO7I4zIptqpkLbZVVAf5BWZ6XVRTC2KBU/edit?usp=sharing)
 
-For **which tools** assisted research vs coding vs the web app, see [Acknowledgements](#acknowledgements) (Claude, Gemini, Cursor, OpenAI runtime).
+For **which tools** assisted research vs coding vs the web app, see [Acknowledgements](#acknowledgements).
 
 ---
 
@@ -817,7 +819,7 @@ Transparent credit for AI-assisted research and engineering (aligned with the ar
 | Role | Tool / source |
 |------|----------------|
 | **Reasoning & coding / algorithmic ground** | **Anthropic Claude 4.6 Opus** — primary assistant for implementation logic, structure, and problem-solving. |
-| **Initial background & literature review** | **Google Gemini 3.1** (research-oriented workflows) — early framing and survey of the problem space. Two working Google Docs were iterated in parallel; together they formed the hybrid basis for how the system was conceived: [Literature / background notes (1)](https://docs.google.com/document/d/1q2nIq1jjj6TZWj34VNzcHCo-4lkws7abH68tE6d485Q/edit?usp=sharing) · [Literature / background notes (2)](https://docs.google.com/document/d/1eIZ9NAsMdAaO7I4zIptqpkLbZVVAf5BWZ6XVRTC2KBU/edit?usp=sharing). |
+| **Initial background & literature review** | **Google Gemini 3.1** (research-oriented workflows) — early framing and survey of the problem space. Working notes and links: [Literature review & working notes (author)](#literature-review-notes). |
 | **Web app — ideation, planning, implementation** | **Cursor** (Composer) — fast iteration in a stack already familiar to the author: **Django**, **jQuery**, **Tailwind CSS**, vanilla JavaScript, background threading, and lightweight async processing for match runs. |
 | **Architecture & deck copy** | **Claude** again used to summarize and tighten prose from the author’s bullets for the architecture write-up and slides. |
 
