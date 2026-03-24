@@ -48,6 +48,18 @@
 <!-- Score breakdown summary -->
 <div class="bg-background-paper border border-divider-light rounded-xl p-6 mb-6">
     <h2 class="text-text-dark font-medium mb-4">Score Breakdown</h2>
+    {% if result.stage_scores.dim_weights %}
+    <div class="mb-4 pb-4 border-b border-divider-light">
+        <p class="text-text-disabled text-xs uppercase tracking-wider mb-2">Dimension weights applied</p>
+        <p class="text-text-body text-sm">
+            D1 {{ result.stage_scores.dim_weights.d1_skills|floatformat:2 }} ·
+            D2 {{ result.stage_scores.dim_weights.d2_seniority|floatformat:2 }} ·
+            D3 {{ result.stage_scores.dim_weights.d3_domain|floatformat:2 }} ·
+            D4 {{ result.stage_scores.dim_weights.d4_constraints|floatformat:2 }}
+            <span class="text-text-disabled text-xs">({{ result.stage_scores.dim_weights.source }})</span>
+        </p>
+    </div>
+    {% endif %}
     <div class="grid grid-cols-3 gap-6 text-sm">
         <div>
             <p class="text-text-disabled text-xs uppercase tracking-wider mb-2">Dimension Composite</p>
@@ -112,7 +124,7 @@
     </div>
 </div>
 
-<!-- D1 Skill detail (collapsible) -->
+<!-- D1 Skill detail (collapsible) — supports skills_checked (D1/deterministic) or d1_breakdown -->
 {% if result.skill_detail %}
 <div class="bg-background-paper border border-divider-light rounded-xl mb-4 overflow-hidden">
     <button class="collapsible-toggle w-full flex items-center justify-between px-6 py-4 text-left hover:bg-background-dust transition-colors" data-target="skill-detail">
@@ -120,9 +132,10 @@
         <svg class="toggle-icon w-4 h-4 text-text-disabled transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
     </button>
     <div id="skill-detail" class="hidden px-6 pb-5">
-        {% if result.skill_detail.skills_checked %}
+        {% with skills_list=result.skill_detail.skills_checked|default:result.skill_detail.d1_breakdown %}
+        {% if skills_list %}
         <div class="space-y-3">
-            {% for skill in result.skill_detail.skills_checked %}
+            {% for skill in skills_list %}
             <div class="flex items-start justify-between py-2 border-b border-divider-light last:border-0">
                 <div class="flex-1">
                     <span class="text-text-dark text-sm font-medium">{{ skill|skill_label }}</span>
@@ -146,6 +159,7 @@
             {% endfor %}
         </div>
         {% endif %}
+        {% endwith %}
     </div>
 </div>
 {% endif %}

@@ -43,10 +43,10 @@ def rec_label(value):
 
 @register.filter
 def skill_label(skill):
-    """Unified label for skill dicts: jd_skill (D1 profile) or skill (deterministic)."""
+    """Unified label for skill dicts: jd_skill (D1 profile), skill (deterministic), or name (resume skills)."""
     if not isinstance(skill, dict):
         return ''
-    return skill.get('jd_skill') or skill.get('skill', '')
+    return skill.get('jd_skill') or skill.get('skill') or skill.get('name', '')
 
 
 @register.filter

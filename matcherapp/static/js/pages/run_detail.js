@@ -11,9 +11,10 @@ import '../index.js';
 
 const $runData      = $('#run-data');
 const runId         = $runData.data('run-id');
-const initialStatus = $runData.data('status');
+// Use attr so we always match server output (jQuery .data() can coerce types / cache oddly)
+const initialStatus = String($runData.attr('data-status') || '').trim().toLowerCase();
 
-if (!runId) throw new Error('run-data element missing');
+if (runId == null || runId === '') throw new Error('run-data element missing');
 
 // ── Re-score entire run ───────────────────────────────────────────────────
 $('#rescore-btn').on('click', function () {
@@ -87,27 +88,46 @@ const renderResults = (results) => {
 };
 
 const pollStatus = () => {
-    const timer = setInterval(() => {
-        $.get(`/api/matching/run/${runId}/status/`, (data) => {
-            $('#progress-bar').css('width', `${data.progress_pct}%`);
-            $('#progress-text').text(`${data.processed} / ${data.total} resumes processed`);
+    let timer = null;
+    const stopPolling = () => {
+        if (timer != null) {
+            clearInterval(timer);
+            timer = null;
+        }
+    };
 
-            if (data.status === 'complete') {
-                clearInterval(timer);
-                renderResults(data.results);
-                $('#status-badge')
-                    .attr('class', 'px-3 py-1.5 rounded-lg text-xs font-medium bg-success-main text-white')
-                    .text('Complete');
-                $('#progress-section').addClass('hidden');
-            } else if (data.status === 'failed') {
-                clearInterval(timer);
-                window.showSnackbar('error', 'Processing failed. Please try again.');
-                $('#status-badge')
-                    .attr('class', 'px-3 py-1.5 rounded-lg text-xs font-medium bg-error-main text-white')
-                    .text('Failed');
-            }
-        });
+    const applyPayload = (data) => {
+        const st = String(data.status || '').toLowerCase();
+        $('#progress-bar').css('width', `${data.progress_pct}%`);
+        $('#progress-text').text(`${data.processed} / ${data.total} resumes processed`);
+        if (data.results?.length) renderResults(data.results);
+
+        if (st === 'complete') {
+            stopPolling();
+            $('#status-badge')
+                .attr('class', 'px-3 py-1.5 rounded-lg text-xs font-medium bg-success-main text-white')
+                .text('Complete');
+            $('#progress-section').addClass('hidden');
+        } else if (st === 'failed') {
+            stopPolling();
+            window.showSnackbar('error', 'Processing failed. Check server logs and try again.');
+            $('#status-badge')
+                .attr('class', 'px-3 py-1.5 rounded-lg text-xs font-medium bg-error-main text-white')
+                .text('Failed');
+            $('#progress-section').addClass('hidden');
+        }
+    };
+
+    $.get(`/api/matching/run/${runId}/status/`)
+        .done(applyPayload)
+        .fail(() => window.showSnackbar('error', 'Could not load run status. Refresh the page.'));
+
+    timer = setInterval(() => {
+        $.get(`/api/matching/run/${runId}/status/`)
+            .done(applyPayload)
+            .fail(() => { /* keep polling; transient errors */ });
     }, 2000);
 };
 
-if (['processing', 'pending'].includes(initialStatus)) pollStatus();
+const shouldPoll = ['processing', 'pending'].includes(initialStatus);
+if (shouldPoll) pollStatus();

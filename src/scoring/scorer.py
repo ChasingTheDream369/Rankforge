@@ -31,13 +31,61 @@ __all__ = [
     "compute_ce_weight", "is_resume", "LLM_PROVIDER",
     "compute_base_score", "compute_skill_penalty", "compute_final_score",
     "compute_confidence", "classify_recommendation",
+    "get_dimension_weights", "normalize_custom_dimension_weights", "resolve_dimension_weights",
 ]
 
-# Dimension weights
+# Base dimension weights (general hiring)
 W_SKILLS = 0.40
 W_SENIORITY = 0.35
 W_DOMAIN = 0.15
 W_CONSTRAINTS = 0.10
+
+# Role-level weight overrides: junior emphasizes skills, senior/staff emphasizes experience
+ROLE_WEIGHTS = {
+    "junior": (0.50, 0.25, 0.15, 0.10),   # skills-heavy
+    "mid": (0.40, 0.35, 0.15, 0.10),      # default
+    "senior": (0.35, 0.45, 0.12, 0.08),  # seniority-heavy
+    "staff": (0.30, 0.50, 0.12, 0.08),   # leadership/architecture
+    "lead": (0.30, 0.50, 0.12, 0.08),
+    "executive": (0.25, 0.55, 0.12, 0.08),
+}
+
+
+def get_dimension_weights(jd_profile: Optional[dict] = None) -> tuple:
+    """Return (w_skills, w_seniority, w_domain, w_constraints) from JD seniority if available."""
+    if not jd_profile:
+        return (W_SKILLS, W_SENIORITY, W_DOMAIN, W_CONSTRAINTS)
+    seniority = (jd_profile.get("seniority") or "mid").lower().strip()
+    return ROLE_WEIGHTS.get(seniority, (W_SKILLS, W_SENIORITY, W_DOMAIN, W_CONSTRAINTS))
+
+
+def normalize_custom_dimension_weights(
+    d1: float, d2: float, d3: float, d4: float
+) -> Optional[tuple]:
+    """Normalize four non-negative importance values to sum 1.0. None if sum is zero."""
+    a = max(0.0, float(d1))
+    b = max(0.0, float(d2))
+    c = max(0.0, float(d3))
+    d = max(0.0, float(d4))
+    s = a + b + c + d
+    if s <= 1e-9:
+        return None
+    return (a / s, b / s, c / s, d / s)
+
+
+def resolve_dimension_weights(
+    jd_profile: Optional[dict],
+    custom_dim_weights: Optional[tuple] = None,
+) -> tuple:
+    """
+    If custom_dim_weights is a 4-tuple summing to ~1, use it (re-normalize if needed).
+    Otherwise fall back to get_dimension_weights(jd_profile) — base constants / role presets.
+    """
+    if custom_dim_weights is not None and len(custom_dim_weights) == 4:
+        t = normalize_custom_dimension_weights(*custom_dim_weights)
+        if t is not None:
+            return t
+    return get_dimension_weights(jd_profile)
 
 # Stage 2 prompts
 _SCORING_SYSTEM = (
@@ -45,7 +93,7 @@ _SCORING_SYSTEM = (
     "Score based solely on evidence in the profiles. Temperature=0. No creativity. Return valid JSON."
 )
 
-_FEW_SHOT_EXAMPLES = """## FEW-SHOT EXAMPLES
+_FEW_SHOT_FINTECH = """## FEW-SHOT EXAMPLES (FinTech / Payments)
 ### Example 1 — STRONG_MATCH
 JD_PROFILE: {"required_skills": [{"name": "Go/Python", "importance": "core"}, {"name": "PostgreSQL", "importance": "core"}, {"name": "AWS", "importance": "core"}, {"name": "Kafka", "importance": "core"}, {"name": "payment systems", "importance": "core"}, {"name": "microservices", "importance": "core"}], "years_required": 5, "domain": "fintech/payments", "seniority": "senior"}
 RESUME_PROFILE: {"skills": [{"name": "Go/Python", "level": "BUILT_WITH", "evidence": "payment microservices handling 8000 TPS"}, {"name": "PostgreSQL", "level": "BUILT_WITH", "evidence": "50TB+ data"}, {"name": "Kafka", "level": "BUILT_WITH", "evidence": "event-driven microservices"}, {"name": "AWS", "level": "BUILT_WITH", "evidence": "ECS migration"}, {"name": "ETL/Airflow", "level": "BUILT_WITH", "evidence": "transaction reconciliation"}], "total_years": 7, "domains": ["fintech"], "seniority_signals": {"architecture": "migrated monolith to microservices", "leadership": "mentored 3 junior engineers", "scale": "8000 TPS, 2M+ users"}}
@@ -54,6 +102,26 @@ OUTPUT: {"d1_skills": 0.92, "d2_seniority": 0.88, "d3_domain": 1.0, "d4_constrai
 JD_PROFILE: {"required_skills": [{"name": "Go/Python", "importance": "core"}, {"name": "PostgreSQL", "importance": "core"}], "years_required": 5, "domain": "fintech", "seniority": "senior"}
 RESUME_PROFILE: {"skills": [{"name": "Kubernetes", "level": "BUILT_WITH", "evidence": "platform engineering"}, {"name": "Go", "level": "LISTED", "evidence": "basic scripting"}], "total_years": 6, "domains": ["devops"], "seniority_signals": {"architecture": "Kubernetes design", "ownership": "infra operations"}}
 OUTPUT: {"d1_skills": 0.25, "d2_seniority": 0.45, "d3_domain": 0.3, "d4_constraints": 0.55, "confidence": "HIGH", "recommendation": "NO_MATCH", "strengths": ["Strong infra"], "gaps": ["No backend product experience"], "rationale": "Platform engineer, not backend."}"""
+
+_FEW_SHOT_AI_ML = """## FEW-SHOT EXAMPLES (AI / ML)
+### Example 1 — STRONG_MATCH
+JD_PROFILE: {"required_skills": [{"name": "Python", "importance": "core"}, {"name": "PyTorch/TensorFlow", "importance": "core"}, {"name": "LLMs", "importance": "core"}, {"name": "RAG pipelines", "importance": "core"}, {"name": "vector databases", "importance": "nice"}], "years_required": 3, "domain": "ai_ml", "seniority": "senior"}
+RESUME_PROFILE: {"skills": [{"name": "Python", "level": "BUILT_WITH", "evidence": "production ML pipelines"}, {"name": "PyTorch", "level": "BUILT_WITH", "evidence": "fine-tuned BERT for NER"}, {"name": "LangChain", "level": "BUILT_WITH", "evidence": "RAG for customer support"}, {"name": "Pinecone", "level": "USED", "evidence": "vector store for retrieval"}], "total_years": 5, "domains": ["ai_ml"], "seniority_signals": {"architecture": "designed RAG architecture", "scale": "10M+ queries/month"}}
+OUTPUT: {"d1_skills": 0.88, "d2_seniority": 0.82, "d3_domain": 1.0, "d4_constraints": 0.9, "confidence": "HIGH", "recommendation": "STRONG_MATCH", "strengths": ["Strong LLM/RAG experience"], "gaps": [], "rationale": "Direct domain and skill match."}
+### Example 2 — PARTIAL_MATCH
+JD_PROFILE: {"required_skills": [{"name": "Python", "importance": "core"}, {"name": "scikit-learn", "importance": "core"}, {"name": "SQL", "importance": "core"}], "years_required": 2, "domain": "ai_ml", "seniority": "mid"}
+RESUME_PROFILE: {"skills": [{"name": "Python", "level": "BUILT_WITH", "evidence": "data analysis scripts"}, {"name": "R", "level": "USED", "evidence": "statistical models"}, {"name": "SQL", "level": "USED", "evidence": "ETL queries"}], "total_years": 3, "domains": ["other"], "seniority_signals": {"ownership": "owned data pipeline"}}
+OUTPUT: {"d1_skills": 0.55, "d2_seniority": 0.5, "d3_domain": 0.4, "d4_constraints": 0.7, "confidence": "MEDIUM", "recommendation": "PARTIAL_MATCH", "strengths": ["Python, SQL"], "gaps": ["No scikit-learn; adjacent domain"], "rationale": "Transferable skills but ML library gap."}"""
+
+
+def _get_few_shot_examples(jd_profile: Optional[dict] = None) -> str:
+    """Select few-shot examples by JD domain; avoid priming AI/ML JDs with only fintech context."""
+    if not jd_profile:
+        return _FEW_SHOT_FINTECH
+    domain = str(jd_profile.get("domain", "")).lower()
+    if "ai" in domain or "ml" in domain or "machine" in domain or "llm" in domain:
+        return _FEW_SHOT_AI_ML
+    return _FEW_SHOT_FINTECH
 
 _SCORING_CRITERIA = """
 ## SCORING CRITERIA (use for all 4 dimensions)
@@ -86,7 +154,7 @@ Return updated JSON (same schema): {{"d1_skills": 0.XX, "d2_seniority": 0.XX, "d
 
 def score_profiles(jd_profile: dict, resume_profile: dict) -> Optional[dict]:
     prompt = _SCORING_PROMPT.format(
-        few_shot=_FEW_SHOT_EXAMPLES,
+        few_shot=_get_few_shot_examples(jd_profile),
         jd_profile_json=json.dumps(jd_profile, separators=(',', ':')),
         resume_profile_json=json.dumps(resume_profile, separators=(',', ':')),
         criteria=_SCORING_CRITERIA,
@@ -141,13 +209,15 @@ def score_resume(
     verbose: bool = False,
     jd_profile: Optional[dict] = None,
     resume_profile: Optional[dict] = None,
+    custom_dim_weights: Optional[tuple] = None,
 ) -> dict:
     mode = "deterministic"
     result = None
     rsp = None
+    jdp = jd_profile  # may be extracted below; used for dimension weights and skill_detail
 
     if has_llm():
-        jdp = jd_profile or extract_jd_profile(jd_text)
+        jdp = jdp or extract_jd_profile(jd_text)
         rsp = resume_profile or extract_resume_profile(resume_text)
 
         if jdp and rsp:
@@ -202,7 +272,13 @@ def score_resume(
     d4 = float(result.get("d4_constraints", 0))
     d1, d2, d3, d4 = (max(0.0, min(1.0, v)) for v in (d1, d2, d3, d4))
 
-    dim = W_SKILLS * d1 + W_SENIORITY * d2 + W_DOMAIN * d3 + W_CONSTRAINTS * d4
+    w_skills, w_seniority, w_domain, w_constraints = resolve_dimension_weights(jdp, custom_dim_weights)
+    _custom_ok = (
+        custom_dim_weights is not None
+        and len(custom_dim_weights) == 4
+        and normalize_custom_dimension_weights(*custom_dim_weights) is not None
+    )
+    dim = w_skills * d1 + w_seniority * d2 + w_domain * d3 + w_constraints * d4
     alpha = compute_ce_weight(n_candidates)
     ce_sig = 1.0 / (1.0 + math.exp(-ce_logit))
     raw = (1.0 - alpha) * dim + alpha * ce_sig
@@ -253,6 +329,13 @@ def score_resume(
     return {
         "d1_skills": d1, "d2_seniority": d2, "d3_domain": d3, "d4_constraints": d4,
         "dim_composite": round(dim, 4), "ce_sigmoid": round(ce_sig, 4), "ce_weight": round(alpha, 4),
+        "dim_weights": {
+            "d1_skills": round(w_skills, 4),
+            "d2_seniority": round(w_seniority, 4),
+            "d3_domain": round(w_domain, 4),
+            "d4_constraints": round(w_constraints, 4),
+            "source": "custom" if _custom_ok else "default",
+        },
         "raw_score": round(raw, 4), "adversarial_penalty": adversarial_penalty,
         "final_score": final, "confidence": conf, "recommendation": rec, "mode": mode,
         "strengths": result.get("strengths", []), "gaps": result.get("gaps", []),
@@ -291,7 +374,53 @@ def compute_final_score(ce_logit, skill_detail, adversarial_penalty=0.0):
 
 
 def compute_confidence(evidence, llm_used=False):
-    return "MEDIUM"
+    """Derive HIGH/MEDIUM/LOW from skill evidence. LLM adds uncertainty → downgrade by one level when borderline."""
+    n_missing_critical = 0
+    n_missing = 0
+    n_matched = 0
+
+    if isinstance(evidence, list):
+        for e in evidence:
+            if hasattr(e, "status"):
+                s = getattr(e, "status", "")
+                if s == "MISSING_CRITICAL":
+                    n_missing_critical += 1
+                elif s == "MISSING":
+                    n_missing += 1
+                elif s in ("MATCHED", "ADJACENT", "GROUP"):
+                    n_matched += 1
+    elif isinstance(evidence, dict):
+        n_missing_critical = len(evidence.get("missing_core", []))
+        n_missing = len(evidence.get("missing", []))
+        n_matched = len(evidence.get("matched", [])) + len(evidence.get("adjacent_matched", [])) + len(evidence.get("group_matched", []))
+        if not n_matched and not n_missing and not n_missing_critical:
+            skills_checked = evidence.get("skills_checked", evidence.get("d1_breakdown", []))
+            for s in skills_checked:
+                mt = s.get("match_type") or ""
+                if "absent" in str(mt).lower():
+                    n_missing += 1
+                elif s.get("score", 0) > 0:
+                    n_matched += 1
+    total = n_matched + n_missing + n_missing_critical
+    if total == 0:
+        return "MEDIUM"
+
+    if n_missing_critical > 0:
+        base = "LOW"
+    elif n_missing > n_matched:
+        base = "LOW"
+    elif n_matched >= total * 0.7:
+        base = "HIGH"
+    elif n_matched >= total * 0.4:
+        base = "MEDIUM"
+    else:
+        base = "LOW"
+
+    if llm_used and base == "HIGH" and n_matched < total * 0.85:
+        return "MEDIUM"  # LLM uncertainty
+    if llm_used and base == "MEDIUM" and n_missing > total * 0.3:
+        return "LOW"
+    return base
 
 
 def classify_recommendation(score, confidence):

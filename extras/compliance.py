@@ -30,6 +30,13 @@ from typing import List, Dict, Optional
 from src.config import FEEDBACK_DIR, LLM_PROVIDER, OPENAI_MODEL
 AUDIT_DIR = os.path.join(FEEDBACK_DIR, "audit_logs")
 BIAS_REPORT_DIR = os.path.join(FEEDBACK_DIR, "bias_reports")
+# NYC LL144 four-fifths rule: flag when impact_ratio < threshold (default 0.8). Override via env for audits.
+try:
+    _fft = os.environ.get("FAIRNESS_FOUR_FIFTHS_THRESHOLD")
+    FAIRNESS_FOUR_FIFTHS_THRESHOLD = float(_fft) if _fft is not None and _fft != "" else 0.8
+except (TypeError, ValueError):
+    FAIRNESS_FOUR_FIFTHS_THRESHOLD = 0.8
+FAIRNESS_FOUR_FIFTHS_THRESHOLD = max(0.1, min(1.0, FAIRNESS_FOUR_FIFTHS_THRESHOLD))
 # ============================================================
 # EU AI Act — Immutable Audit Trail
 # ============================================================
@@ -214,15 +221,19 @@ def compute_impact_ratios(selection_rates: Dict[str, float]) -> Dict[str, float]
     if max_rate == 0:
         return {g: 0.0 for g in selection_rates}
     return {g: round(r / max_rate, 4) for g, r in selection_rates.items()}
-def check_four_fifths_rule(impact_ratios: Dict[str, float]) -> List[dict]:
-    """Flag groups with impact ratio below 0.8."""
+def check_four_fifths_rule(
+    impact_ratios: Dict[str, float],
+    threshold: Optional[float] = None,
+) -> List[dict]:
+    """Flag groups with impact ratio below threshold (default: FAIRNESS_FOUR_FIFTHS_THRESHOLD, usually 0.8)."""
+    th = FAIRNESS_FOUR_FIFTHS_THRESHOLD if threshold is None else max(0.1, min(1.0, float(threshold)))
     violations = []
     for group, ratio in impact_ratios.items():
-        if ratio < 0.8:
+        if ratio < th:
             violations.append({
                 "group": group,
                 "impact_ratio": ratio,
-                "threshold": 0.8,
+                "threshold": th,
                 "severity": "CRITICAL" if ratio < 0.5 else "WARNING",
                 "action_required": "Immediate review and remediation required" if ratio < 0.5
                                    else "Monitor and investigate root cause",

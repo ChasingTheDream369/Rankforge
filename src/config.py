@@ -45,7 +45,8 @@ MAX_RESUMES_PER_RUN = 50
 # Scoring
 CRITICAL_SKILL_PENALTY = 0.85
 CRITICAL_IMPORTANCE_THRESHOLD = 0.8  # importance >= 4 out of 5
-CE_WEIGHT = 0.25  # (1-CE_WEIGHT)*dim + CE_WEIGHT*sigmoid(ce_logit)
+# Final blend: (1 - CE_WEIGHT) * dim_composite + CE_WEIGHT * sigmoid(ce_logit)
+CE_WEIGHT = 0.5
 
 # Paths
 JD_DIR = "data/job_descriptions"

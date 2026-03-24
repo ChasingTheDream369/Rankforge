@@ -43,7 +43,7 @@
         <!-- Settings -->
         <div class="bg-background-paper border border-divider-light rounded-xl p-6">
             <h2 class="text-text-dark font-medium mb-4">Settings</h2>
-            <div>
+            <div class="mb-6">
                 <label class="block text-text-body text-sm font-medium mb-2">Scoring Mode</label>
                 <select id="scoring-mode"
                     class="w-full px-4 py-2.5 rounded-lg border border-divider-light bg-background-default text-text-dark text-sm focus:outline-none focus:border-primary-main transition-colors">
@@ -51,6 +51,42 @@
                     <option value="llm">LLM (requires API key)</option>
                     <option value="deterministic">Deterministic (no API calls)</option>
                 </select>
+            </div>
+
+            <div class="border-t border-divider-light pt-5">
+                <label class="flex items-start gap-3 cursor-pointer">
+                    <input id="use-custom-dims" type="checkbox" value="1"
+                        class="mt-1 rounded border-divider-light text-primary-main focus:ring-primary-main">
+                    <span>
+                        <span class="text-text-dark text-sm font-medium block">Custom dimension importance (this JD)</span>
+                        <span class="text-text-disabled text-xs mt-0.5 block">Leave unchecked to use defaults: base weights (40/35/15/10) adjusted by detected job seniority. Percentages below are normalized to 100%.</span>
+                    </span>
+                </label>
+                <div id="custom-dims-panel" class="mt-4 space-y-3 hidden">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                        <div>
+                            <label class="text-text-body text-xs font-medium">D1 — Skills (%)</label>
+                            <input id="d1-pct" type="number" min="0" max="100" step="1" value="40"
+                                class="w-full mt-1 px-3 py-2 rounded-lg border border-divider-light bg-background-default text-text-dark">
+                        </div>
+                        <div>
+                            <label class="text-text-body text-xs font-medium">D2 — Seniority (%)</label>
+                            <input id="d2-pct" type="number" min="0" max="100" step="1" value="35"
+                                class="w-full mt-1 px-3 py-2 rounded-lg border border-divider-light bg-background-default text-text-dark">
+                        </div>
+                        <div>
+                            <label class="text-text-body text-xs font-medium">D3 — Domain (%)</label>
+                            <input id="d3-pct" type="number" min="0" max="100" step="1" value="15"
+                                class="w-full mt-1 px-3 py-2 rounded-lg border border-divider-light bg-background-default text-text-dark">
+                        </div>
+                        <div>
+                            <label class="text-text-body text-xs font-medium">D4 — Constraints (%)</label>
+                            <input id="d4-pct" type="number" min="0" max="100" step="1" value="10"
+                                class="w-full mt-1 px-3 py-2 rounded-lg border border-divider-light bg-background-default text-text-dark">
+                        </div>
+                    </div>
+                    <p class="text-text-disabled text-xs">Final score still blends 50% this weighted 4D composite with 50% retrieval cross-encoder signal (when multiple resumes).</p>
+                </div>
             </div>
         </div>
 

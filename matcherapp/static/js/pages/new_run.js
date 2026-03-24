@@ -50,6 +50,13 @@ $dropZone
 
 $fileInput.on('change', function () { addFiles(this.files); });
 
+// ── Custom dimension weights panel ──────────────────────────────────────────
+const $useCustomDims = $('#use-custom-dims');
+const $customDimsPanel = $('#custom-dims-panel');
+$useCustomDims.on('change', function () {
+    $customDimsPanel.toggleClass('hidden', !this.checked);
+});
+
 // ── Remove individual file ────────────────────────────────────────────────
 $fileList.on('click', '.remove-file', function () {
     const idx = parseInt($(this).data('index'), 10);
@@ -83,6 +90,13 @@ $('#run-form').on('submit', function (e) {
     formData.append('jd_text', jdText);
     formData.append('jd_title', jdTitle);
     formData.append('scoring_mode', $('#scoring-mode').val());
+    if ($useCustomDims.is(':checked')) {
+        formData.append('custom_dim_weights', '1');
+        ['d1', 'd2', 'd3', 'd4'].forEach((k) => {
+            const v = $(`#${k}-pct`).val();
+            formData.append(`${k}_pct`, v === '' || v == null ? '0' : String(v));
+        });
+    }
     Array.from(fileStore.files).forEach(f => formData.append('resumes', f));
 
     $.ajax({

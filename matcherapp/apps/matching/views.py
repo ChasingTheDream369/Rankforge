@@ -37,11 +37,31 @@ def new_run(request):
     return render(request, 'matching/new_run.html')
 
 
+def _scoring_config_note(cfg: dict) -> str:
+    if not cfg or not cfg.get("custom_dims") or not cfg.get("weights"):
+        return ""
+    w = cfg["weights"]
+    rp = cfg.get("weights_raw_pct")
+    if rp and len(rp) == 4:
+        return (
+            f"Custom D1–D4 mix (your %): Skills {rp[0]:.0f}% · Seniority {rp[1]:.0f}% · "
+            f"Domain {rp[2]:.0f}% · Constraints {rp[3]:.0f}% — normalized for scoring."
+        )
+    return (
+        f"Custom D1–D4 weights (effective): Skills {w[0]*100:.1f}% · Seniority {w[1]*100:.1f}% · "
+        f"Domain {w[2]*100:.1f}% · Constraints {w[3]*100:.1f}%."
+    )
+
+
 @login_required
 def run_detail(request, run_id):
     run = get_object_or_404(MatchRun.objects.select_related('job'), id=run_id)
     results = run.results.select_related('resume').all()
-    context = {'run': run, 'results': results}
+    context = {
+        'run': run,
+        'results': results,
+        'scoring_weights_note': _scoring_config_note(run.scoring_config or {}),
+    }
     return render(request, 'matching/run_detail.html', context)
 
 

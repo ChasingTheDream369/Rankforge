@@ -8,6 +8,31 @@ from matcherapp.decorators import login_required
 from matcherapp.models import Job, MatchRun, Resume, MatchResult
 
 
+def _parse_scoring_config_from_request(request) -> dict:
+    """
+    Build MatchRun.scoring_config from POST.
+    Default: empty dict → scorer uses base constants + JD seniority presets.
+    Custom: user percentages for D1–D4 (normalized to sum 1.0).
+    """
+    if request.POST.get("custom_dim_weights") not in ("1", "true", "on", "yes"):
+        return {}
+    try:
+        d1 = float(request.POST.get("d1_pct", 0) or 0)
+        d2 = float(request.POST.get("d2_pct", 0) or 0)
+        d3 = float(request.POST.get("d3_pct", 0) or 0)
+        d4 = float(request.POST.get("d4_pct", 0) or 0)
+    except (TypeError, ValueError):
+        return {}
+    s = d1 + d2 + d3 + d4
+    if s <= 0:
+        return {}
+    return {
+        "custom_dims": True,
+        "weights": [d1 / s, d2 / s, d3 / s, d4 / s],
+        "weights_raw_pct": [d1, d2, d3, d4],
+    }
+
+
 @login_required
 @require_http_methods(['POST'])
 def start_run(request):
@@ -76,11 +101,13 @@ def start_run(request):
             return JsonResponse({'message': f'Maximum {MAX_RESUMES_PER_RUN} resumes per run.'}, status=400)
 
         job = Job.objects.create(title=jd_title, description=jd_text)
+        scoring_cfg = _parse_scoring_config_from_request(request)
         run = MatchRun.objects.create(
             job=job,
             scoring_mode=scoring_mode,
             total_resumes=len(resume_files),
             status='pending',
+            scoring_config=scoring_cfg,
         )
 
         for stem, file_obj, is_path in resume_files:
@@ -114,31 +141,38 @@ def start_run(request):
         return JsonResponse({'message': str(e)}, status=500)
 
 
+def _run_results_json(run):
+    """Serialize MatchResults for the run-detail poll API (partial rows while processing, final ranks when complete)."""
+    qs = run.results.select_related('resume').order_by('-final_score', 'id')
+    results_data = []
+    for idx, r in enumerate(qs, start=1):
+        display_rank = r.rank if run.status == 'complete' and r.rank > 0 else idx
+        results_data.append({
+            'id': r.id,
+            'resume_id': r.resume.id,
+            'rank': display_rank,
+            'name': r.resume.name,
+            'final_score': round(r.final_score, 4),
+            'confidence': r.confidence,
+            'recommendation': r.recommendation,
+            'd1_skills': round(r.d1_skills, 2),
+            'd2_seniority': round(r.d2_seniority, 2),
+            'd3_domain': round(r.d3_domain, 2),
+            'd4_constraints': round(r.d4_constraints, 2),
+            'threat_level': r.threat_level,
+            'score_color': r.score_color,
+            'detail_url': f'/matching/candidate/{r.id}/',
+        })
+    return results_data
+
+
 @login_required
 @require_http_methods(['GET'])
 def run_status(request, run_id):
     try:
         run = MatchRun.objects.get(id=run_id)
-        results_data = []
-        if run.status == 'complete':
-            results = run.results.select_related('resume').all()
-            for r in results:
-                results_data.append({
-                    'id': r.id,
-                    'resume_id': r.resume.id,
-                    'rank': r.rank,
-                    'name': r.resume.name,
-                    'final_score': round(r.final_score, 4),
-                    'confidence': r.confidence,
-                    'recommendation': r.recommendation,
-                    'd1_skills': round(r.d1_skills, 2),
-                    'd2_seniority': round(r.d2_seniority, 2),
-                    'd3_domain': round(r.d3_domain, 2),
-                    'd4_constraints': round(r.d4_constraints, 2),
-                    'threat_level': r.threat_level,
-                    'score_color': r.score_color,
-                    'detail_url': f'/matching/candidate/{r.id}/',
-                })
+        # Expose rows during pending/processing so the UI is not blank for long LLM runs
+        results_data = _run_results_json(run) if run.results.exists() else []
         return JsonResponse({
             'status': run.status,
             'processed': run.processed,
@@ -231,13 +265,37 @@ def rescore_single(request, result_id):
 
         n = run.results.count()
         cleaned, threat = sanitize(text, run.job.description, str(resume.id))
+        ce_logit = 0.0
+        try:
+            from src.retrieval.engine import RetrievalEngine
+            all_texts = {}
+            for r in run.resumes.all():
+                rt = r.raw_text or (r.name if not r.file else "")
+                if len(rt) < 100 and r.file:
+                    try:
+                        from src.ingestion.extractor import extract_text
+                        rt = extract_text(r.file.path)
+                    except Exception:
+                        pass
+                if rt:
+                    all_texts[str(r.id)] = rt
+            if all_texts:
+                eng = RetrievalEngine()
+                eng.index(all_texts)
+                eng.search(run.job.description)
+                ce_logit = eng.get_cross_encoder_logit(str(resume.id))
+        except Exception:
+            pass
+        from matcherapp.apps.matching.services import custom_dim_weights_tuple
+
         scored = score_resume(
             jd_text=run.job.description,
             resume_text=cleaned,
-            ce_logit=0.0,
+            ce_logit=ce_logit,
             n_candidates=n,
             adversarial_penalty=threat.total_penalty,
             verbose=False,
+            custom_dim_weights=custom_dim_weights_tuple(run),
         )
 
         result.final_score = scored['final_score']

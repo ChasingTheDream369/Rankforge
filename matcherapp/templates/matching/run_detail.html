@@ -12,6 +12,9 @@
         </div>
         <h1 class="text-text-dark text-2xl font-semibold">{{ run.job.title }}</h1>
         <p class="text-text-disabled text-sm mt-0.5">Run #{{ run.id }} · {{ run.total_resumes }} resumes · {{ run.created_at|date:"M d, Y H:i" }}</p>
+        {% if scoring_weights_note %}
+        <p class="text-text-body text-xs mt-2 px-2 py-1.5 rounded-lg bg-background-dust border border-divider-light">{{ scoring_weights_note }}</p>
+        {% endif %}
     </div>
     <div class="flex items-center gap-3">
     {% if run.status == 'complete' %}

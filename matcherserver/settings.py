@@ -65,6 +65,8 @@ if ENV_CONFIG.get('USE_SQLITE', 'true').lower() == 'true':
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
             'NAME': BASE_DIR / 'db.sqlite3',
+            # Longer timeout: background thread scores resumes while the UI polls (avoids "database is locked")
+            'OPTIONS': {'timeout': 30},
         }
     }
 else:

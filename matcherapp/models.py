@@ -29,6 +29,8 @@ class MatchRun(models.Model):
     scoring_mode = models.CharField(max_length=20, choices=MODE_CHOICES, default='auto')
     total_resumes = models.IntegerField(default=0)
     processed = models.IntegerField(default=0)
+    # custom_dims + weights [w_d1..w_d4] when user sets JD-specific dimension importance; else {}
+    scoring_config = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True, blank=True)
 
