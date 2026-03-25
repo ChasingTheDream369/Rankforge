@@ -293,12 +293,19 @@ cp .env.example .env          # then edit .env with your keys
 
 ```bash
 python manage.py migrate
-python manage.py createsuperuser
-python manage.py seed_data          # optional: populate demo JD + resumes
-python manage.py runserver
+python manage.py seed_data          # demo login + sample run; or: createsuperuser
+python manage.py runserver          # e.g. runserver 0.0.0.0:8005
 ```
 
-Visit `http://127.0.0.1:8000` — log in, go to **New Run**, paste JD, upload resumes (up to 50; ZIP supported). On *New Run* you can also select a **scoring mode** (Auto / LLM / Deterministic) and optionally set **custom dimension weights** (D1–D4 percentages).
+**Quick path:** `venv` → `pip install -r requirements.txt` → `cp .env.example .env` (add `OPENAI_API_KEY` only if you want LLM scoring) → `migrate` → `seed_data` → `runserver` → open the app in the browser.
+
+**Login:** `python manage.py seed_data` creates a superuser **`admin` / `admin123`** only when no user named `admin` exists yet. If you already ran `createsuperuser`, use that account instead. **Change the password** before any shared or non-local use.
+
+**Core algorithm check (one click):** after login, open **ENGINE → Test Suite** (`/tests/`) and use **Run All Tests**. That runs the same checks as `tests/test_all.py` (ontology, sanitizers, scoring contracts, metrics, extractors, etc.) from the UI—no extra CLI step.
+
+If you skip `seed_data`, run `python manage.py createsuperuser` once, then use **New Run** as below.
+
+Visit `http://127.0.0.1:8000` (or your chosen host/port) — **Dashboard**, **New Run** (paste JD, upload resumes up to 50; ZIP supported), **scoring mode** (Auto / LLM / Deterministic), optional **custom D1–D4 weights**.
 
 Processing runs in a background subprocess (`manage.py process_run <id>`); the run-detail page auto-polls for progress and streams partial results.
 
