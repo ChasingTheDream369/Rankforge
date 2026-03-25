@@ -5,7 +5,7 @@
 1. [Overview](#overview)
 2. [Technical Approach & Justification](#technical-approach--justification)
 3. [Architecture](#architecture)
-4. [Setup & Usage](#setup--usage) — [Web UI walkthrough & screenshots](#web-ui-walkthrough--rankforge-screenshots)
+4. [Setup & Usage](#setup--usage) — [Live demo (hosted)](#live-demo-hosted) · [Web UI walkthrough & screenshots](#web-ui-walkthrough--rankforge-screenshots)
 5. [Testing](#testing)
 6. [Project Structure](#project-structure)
 7. [**Extended reference** →](docs/reference.md) benchmarks, roadmap, limitations, research, citations
@@ -260,6 +260,24 @@ The final score is built in clearly separated layers. If we change a layer tomor
 ---
 
 ## Setup & Usage
+
+<a id="live-demo-hosted"></a>
+
+### Live demo (hosted)
+
+**URL:** [https://rankforge-h438.onrender.com/login/](https://rankforge-h438.onrender.com/login/)
+
+Hosted login credentials are **not** listed here. For an account you fully control, use **local setup** below (`seed_data` creates `admin` / `admin123` on a fresh DB).
+
+This is a **base deployment for demonstration** only: a quick **Django** app on [**Render**](https://render.com/) (managed web service). It is **not** tuned for production load.
+
+The **screenshots** under [`docs/rankforge_screens/`](docs/rankforge_screens/) (also embedded in the [walkthrough below](#web-ui-walkthrough--rankforge-screenshots)) give a **clearer, more stable** view of the full UI than relying on the live instance alone.
+
+**Resource limits:** the hosted tier has **limited RAM**; **parallel work and large or heavy matching runs** may be slow or unreliable. Use it for **basic evaluation and walkthroughs**. For full behavior, use **local setup** (below) and the **Test Suite** / `pytest` instructions in this README.
+
+If the demo is down or misbehaving, follow **local setup** and **algorithm-level testing** (e.g. **ENGINE → Test Suite** after login, or `python -m pytest tests/test_all.py -v`).
+
+---
 
 ### Prerequisites
 
