@@ -94,7 +94,12 @@ MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-
+CSRF_TRUSTED_ORIGINS = [
+    "https://rankforge-h438.onrender.com"
+]
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+CSRF_COOKIE_SECURE = True
+SESSION_COOKIE_SECURE = True
 # Background processing via threading.Thread — no Celery/Redis needed
 
 OPENAI_API_KEY = ENV_CONFIG.get('OPENAI_API_KEY', '')
