@@ -291,15 +291,24 @@ cp .env.example .env          # then edit .env with your keys
 
 ### Web UI
 
+**Demo login** (after you run `python manage.py seed_data` once — it creates this user only if `admin` does not already exist):
+
+| | |
+|--|--|
+| **Username** | `admin` |
+| **Password** | `admin123` |
+
+Log in at **`/login/`**. For anything beyond your own machine, change that password or use `createsuperuser` instead.
+
 ```bash
 python manage.py migrate
-python manage.py seed_data          # demo login + sample run; or: createsuperuser
+python manage.py seed_data          # creates admin / admin123 + sample FinPay run (see table above)
 python manage.py runserver          # e.g. runserver 0.0.0.0:8005
 ```
 
-**Quick path:** `venv` → `pip install -r requirements.txt` → `cp .env.example .env` (add `OPENAI_API_KEY` only if you want LLM scoring) → `migrate` → `seed_data` → `runserver` → open the app in the browser.
+**Quick path:** `venv` → `pip install -r requirements.txt` → `cp .env.example .env` (add `OPENAI_API_KEY` only if you want LLM scoring) → `migrate` → `seed_data` → `runserver` → open the app → sign in with **`admin`** / **`admin123`**.
 
-**Login:** `python manage.py seed_data` creates a superuser **`admin` / `admin123`** only when no user named `admin` exists yet. If you already ran `createsuperuser`, use that account instead. **Change the password** before any shared or non-local use.
+If `admin` already exists, `seed_data` will not reset the password — use your existing credentials or Django’s password change flow.
 
 **Core algorithm check (one click):** after login, open **ENGINE → Test Suite** (`/tests/`) and use **Run All Tests**. That runs the same checks as `tests/test_all.py` (ontology, sanitizers, scoring contracts, metrics, extractors, etc.) from the UI—no extra CLI step.
 
